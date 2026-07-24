@@ -270,6 +270,18 @@ export default function RootLayout() {
         refreshSubscription().catch((e) =>
           logError(e, "RootLayout.foregroundSubscriptionRefresh"),
         );
+        // Catch up on server-side inspection changes missed while backgrounded —
+        // e.g. an X-cancel the inbound EF applied while the app was suspended.
+        // Realtime can't deliver to a suspended socket AND doesn't replay missed
+        // events on reconnect, so a foreground pull-sync is the real backstop.
+        // Mirrors the auth-entry catch-up; reload the store + refresh the badge
+        // after the pull so a landed cancel drops from the list and counts.
+        syncAll()
+          .then(async () => {
+            loadInspections((await getAllInspections()) ?? []);
+            useSettingsStore.getState().refreshCancelledCount?.();
+          })
+          .catch((e) => logError(e, "RootLayout.foregroundSync"));
         // Calendar has no change-notification API — poll for events an
         // assistant added/edited/deleted while we were backgrounded. Self-gates
         // on the calendar config, so this is a cheap no-op when sync is off.

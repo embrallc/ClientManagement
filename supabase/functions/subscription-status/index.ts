@@ -168,7 +168,12 @@ serve(async (req) => {
     const rc = await fetchRcSubscriber(user.id);
     if (rc) {
       const wrote = await writeOrgBilling(admin, orgSk, user.id, rc, Date.now());
-      logInfo("rest_sync", { org_sk: orgSk, ok: wrote.ok, active: rc.entitlementActive });
+      logInfo("rest_sync", {
+        org_sk: orgSk,
+        ok: wrote.ok,
+        guarded: wrote.guarded ?? false,
+        active: rc.entitlementActive,
+      });
     } else {
       logInfo("rest_sync_unavailable", { org_sk: orgSk });
     }

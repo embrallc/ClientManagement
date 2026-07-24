@@ -126,6 +126,10 @@ serve(async (req) => {
       });
       return json({ error: wrote.error }, 500);
     }
+    if (wrote.guarded) {
+      logInfo("guarded_skip", { org_sk: orgSk, app_user_id: appUserId, path: "rest" });
+      return json({ ok: true, guarded: true });
+    }
     logInfo("synced.rest", {
       org_sk: orgSk,
       active: rc.entitlementActive,
@@ -157,6 +161,10 @@ serve(async (req) => {
       org_sk: orgSk,
     });
     return json({ error: wrote.error }, 500);
+  }
+  if (wrote.guarded) {
+    logInfo("guarded_skip", { org_sk: orgSk, app_user_id: appUserId, path: "event" });
+    return json({ ok: true, guarded: true });
   }
   logInfo("synced.event_fields", {
     org_sk: orgSk,

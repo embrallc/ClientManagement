@@ -14,7 +14,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { logError } from "../db/logs";
 import { useSettingsStore } from "../stores/useSettingsStore";
-import { useSubscriptionStore } from "../stores/useSubscriptionStore";
 import { isOnline } from "../utils/connectivity";
 import { supabase } from "../utils/supabase";
 
@@ -35,7 +34,6 @@ export default function ManageUsersScreen() {
   const orgSk = useSettingsStore((s) => s.orgSk);
   const userProfile = useSettingsStore((s) => s.userProfile);
   const setUserProfile = useSettingsStore((s) => s.setUserProfile);
-  const refreshSubscription = useSubscriptionStore((s) => s.refreshStatus);
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,9 +44,6 @@ export default function ManageUsersScreen() {
   const [billingOwnerId, setBillingOwnerId] = useState(null);
 
   const canManage = userProfile === "owner";
-  // Who may transfer the $ designation: an owner, or the current holder.
-  const canTransferBilling =
-    userProfile === "owner" || (!!billingOwnerId && userSk === billingOwnerId);
 
   const load = useCallback(async () => {
     if (!orgSk) {
@@ -201,95 +196,17 @@ export default function ManageUsersScreen() {
     );
   }
 
-  // Make `target` the org's sole billing owner (approve teammates + change the
-  // plan). Server enforces the real rules; this guards the UI.
-  function transferBilling(target) {
-    if (!isOnline()) {
-      Alert.alert(
-        "You're offline",
-        "Connect to the internet to change the billing owner.",
-      );
-      return;
-    }
-    const name = displayName(target);
-    const hasCurrent = !!billingOwnerId;
-    Alert.alert(
-      hasCurrent ? "Transfer billing control?" : "Set billing owner?",
-      `You're ${hasCurrent ? "transferring" : "assigning"} the only org rights to approve new users and subscription upgrades to ${name}. After this, only ${name} can add seats or change the plan.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: hasCurrent ? "Transfer" : "Assign",
-          onPress: async () => {
-            setUpdating((m) => ({ ...m, [target.id]: true }));
-            try {
-              const { error } = await supabase.rpc("set_billing_owner", {
-                p_target_user_id: target.id,
-              });
-              if (error) throw error;
-              setBillingOwnerId(target.id);
-              // Refresh the shared status so Settings/Approvals re-gate for the
-              // new (and former) billing owner right away.
-              refreshSubscription?.();
-            } catch (e) {
-              logError(
-                e,
-                `ManageUsersScreen.transferBilling target=${target.id}`,
-              );
-              Alert.alert(
-                "Couldn't transfer",
-                e?.message ?? "The server rejected this change.",
-              );
-            } finally {
-              setUpdating((m) => {
-                const next = { ...m };
-                delete next[target.id];
-                return next;
-              });
-            }
-          },
-        },
-      ],
-    );
-  }
-
-  // Tapping any $ badge: explain the state or start a transfer, with friendly
-  // reasons when it can't be moved to this person.
-  function onBadgePress(item) {
-    const isBillingOwner = item.id === billingOwnerId;
-    const eligible =
-      item.user_profile === "owner" || item.user_profile === "admin";
-    if (isBillingOwner) {
-      Alert.alert(
-        "Billing owner",
-        `${displayName(item)} is the billing owner — the only person who can approve teammates and change the subscription.`,
-      );
-      return;
-    }
-    if (!eligible) {
-      Alert.alert(
-        "Not eligible",
-        "The billing owner must be an owner or admin. Change this person's role first.",
-      );
-      return;
-    }
-    if (!canTransferBilling) {
-      Alert.alert(
-        "Not allowed",
-        "Only an owner or the current billing owner can change who pays.",
-      );
-      return;
-    }
-    transferBilling(item);
-  }
+  // Billing owner is locked to the original payer (single-payer model). The in-app
+  // TRANSFER flow was decommissioned 2026-07-24 — preserved in
+  // docs/decommissioned/billing-owner-transfer.md. The $ badge below is now a
+  // read-only marker of who pays; it re-defaults automatically only if the payer
+  // deletes their account (server-side).
 
   function renderItem({ item }) {
     const isSelf = item.id === userSk;
     const busy = !!updating[item.id];
     const showDelete = canManage && !isSelf;
     const isBillingOwner = item.id === billingOwnerId;
-    const eligibleForBilling =
-      item.user_profile === "owner" || item.user_profile === "admin";
     return (
       <View style={styles.userRow}>
         <View style={styles.userHeader}>
@@ -304,32 +221,18 @@ export default function ManageUsersScreen() {
             )}
           </View>
           <View style={styles.headerActions}>
-            <TouchableOpacity
-              onPress={() => onBadgePress(item)}
-              hitSlop={theme.layout.hitSlop.medium}
-              style={[
-                styles.dollarBadge,
-                isBillingOwner && styles.dollarBadgeActive,
-                !isBillingOwner &&
-                  !eligibleForBilling &&
-                  styles.dollarBadgeMuted,
-              ]}
-              accessibilityLabel={
-                isBillingOwner ? "Billing owner" : "Set as billing owner"
-              }
-            >
-              <MaterialCommunityIcons
-                name="currency-usd"
-                size={16}
-                color={
-                  isBillingOwner
-                    ? "#fff"
-                    : eligibleForBilling
-                      ? theme.colors.primary
-                      : theme.colors.textFine
-                }
-              />
-            </TouchableOpacity>
+            {isBillingOwner && (
+              <View
+                style={[styles.dollarBadge, styles.dollarBadgeActive]}
+                accessibilityLabel="Billing owner"
+              >
+                <MaterialCommunityIcons
+                  name="currency-usd"
+                  size={16}
+                  color="#fff"
+                />
+              </View>
+            )}
             {busy ? (
               <ActivityIndicator size="small" color={theme.colors.primary} />
             ) : showDelete ? (
@@ -413,7 +316,7 @@ export default function ManageUsersScreen() {
           ListHeaderComponent={
             <Text style={styles.helpText}>
               {canManage
-                ? "Tap a role to change a member's permission. Tap the $ to choose who pays for the org — the billing owner is the only one who can approve teammates or change the plan."
+                ? "Tap a role to change a member's permission. The $ marks the billing owner — the only person who can approve teammates or change the plan."
                 : "Only an owner can change roles."}
             </Text>
           }
@@ -518,8 +421,7 @@ const styles = StyleSheet.create({
   deleteBtn: {
     padding: theme.spacing.xs,
   },
-  // $ badge: outline by default, filled for the billing owner, dimmed for
-  // members (who can't hold billing).
+  // $ badge: filled marker shown only on the billing owner (read-only).
   dollarBadge: {
     width: 28,
     height: 28,
@@ -533,11 +435,6 @@ const styles = StyleSheet.create({
   dollarBadgeActive: {
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
-  },
-  dollarBadgeMuted: {
-    borderColor: theme.colors.input,
-    backgroundColor: "transparent",
-    opacity: 0.5,
   },
   roleRow: {
     flexDirection: "row",

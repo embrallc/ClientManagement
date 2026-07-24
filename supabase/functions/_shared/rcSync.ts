@@ -76,16 +76,41 @@ export async function writeOrgBilling(
   rcAppUserId: string,
   state: RcState,
   eventMs: number,
-): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+): Promise<{ ok: boolean; skipped?: boolean; guarded?: boolean; error?: string }> {
   const { data: existing, error: readErr } = await admin
     .from("org_billing")
-    .select("last_event_ms")
+    .select("last_event_ms, rc_app_user_id")
     .eq("org_sk", orgSk)
     .maybeSingle();
   if (readErr) return { ok: false, error: readErr.message };
   if (existing && Number(existing.last_event_ms) > eventMs) {
     return { ok: true, skipped: true };
   }
+
+  // Single-payer guard. Zanbi funds each org through ONE designated payer, so
+  // org_billing must only ever be written by that account. Allow a write when
+  // the writer is EITHER the payer of record (its own renewals/upgrades/cancels)
+  // OR the org's designated billing owner (first purchase, or an owner takeover
+  // once the previous payer is gone). A truly greenfield org (no payer AND no
+  // designated owner yet) may seed. Anything else is a stray purchase by another
+  // user — refuse it so it can't overwrite the org's seats / payer and cause
+  // double-billing or seat lockouts. Return ok (not an error) so the caller and
+  // RevenueCat's retries treat it as handled rather than something to retry.
+  const currentPayer = (existing?.rc_app_user_id as string | null) ?? null;
+  if (currentPayer !== rcAppUserId) {
+    const { data: org, error: orgErr } = await admin
+      .from("organizations")
+      .select("billing_owner_id")
+      .eq("org_sk", orgSk)
+      .maybeSingle();
+    if (orgErr) return { ok: false, error: orgErr.message };
+    const designated = (org?.billing_owner_id as string | null) ?? null;
+    const greenfield = currentPayer === null && designated === null;
+    if (!greenfield && designated !== rcAppUserId) {
+      return { ok: true, skipped: true, guarded: true };
+    }
+  }
+
   const { error: upsertErr } = await admin.from("org_billing").upsert({
     org_sk: orgSk,
     entitlement_active: state.entitlementActive,

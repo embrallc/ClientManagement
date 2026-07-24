@@ -252,6 +252,7 @@ export default function SettingsScreen() {
 
   const subscriptionStatus = useSubscriptionStore((s) => s.status);
   const refreshSubscription = useSubscriptionStore((s) => s.refreshStatus);
+  const pollSubscriptionUntil = useSubscriptionStore((s) => s.pollStatusUntil);
   const clearSubscription = useSubscriptionStore((s) => s.clear);
 
   async function handleSubscribe() {
@@ -265,6 +266,10 @@ export default function SettingsScreen() {
       result === PAYWALL_RESULT.RESTORED
     ) {
       await refreshSubscription({ sync: true });
+      // Then keep pulling for a few seconds until the plan flips active, so the
+      // UI catches up promptly instead of looking stuck (Issue #6). Fire-and-
+      // forget so it never holds the spinner or blocks anything else.
+      pollSubscriptionUntil((s) => s?.state === "active").catch(() => {});
     }
   }
 

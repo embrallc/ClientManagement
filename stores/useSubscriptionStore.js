@@ -75,6 +75,27 @@ export const useSubscriptionStore = create((set, get) => ({
     }
   },
 
+  // After a purchase the server can lag a few seconds before org_billing
+  // reflects the new plan (RevenueCat/webhook propagation). Re-pull server truth
+  // a few times, with a short delay between, until `predicate(status)` holds or
+  // we run out of tries — so the UI catches up in seconds instead of waiting for
+  // the next manual refresh. Best-effort and side-effect-free: it only re-runs
+  // refreshStatus (which reads the server and updates the store), so it's safe to
+  // fire-and-forget from a purchase-completion callback without touching other
+  // flows.
+  pollStatusUntil: async (predicate, { attempts = 8, delayMs = 1200 } = {}) => {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        if (predicate?.(get().status)) return get().status;
+      } catch (_) {}
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, delayMs));
+      // eslint-disable-next-line no-await-in-loop
+      await get().refreshStatus({ sync: true });
+    }
+    return get().status;
+  },
+
   clear: () => {
     set({ status: null, customerInfo: null });
     AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});

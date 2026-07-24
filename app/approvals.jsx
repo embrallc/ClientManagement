@@ -60,6 +60,7 @@ export default function ApprovalsScreen() {
   const router = useRouter();
   const status = useSubscriptionStore((s) => s.status);
   const refreshStatus = useSubscriptionStore((s) => s.refreshStatus);
+  const pollStatusUntil = useSubscriptionStore((s) => s.pollStatusUntil);
 
   const isOwner = status?.role === "owner";
   const isBillingOwner = status?.isBillingOwner === true;
@@ -81,6 +82,10 @@ export default function ApprovalsScreen() {
       await purchaseSeatCount(targetSeats);
       // Pull RevenueCat truth server-side now — the webhook can lag the purchase.
       await refreshStatus({ sync: true });
+      // Then keep pulling for a few seconds until the new seat count lands, so
+      // the queue + badge update promptly instead of looking stuck (Issue #6).
+      // Fire-and-forget so it never holds the spinner or blocks anything else.
+      pollStatusUntil((s) => (s?.seats ?? 0) >= targetSeats).catch(() => {});
     } catch (e) {
       // The user backing out of the store sheet is not an error.
       if (!e?.userCancelled) {

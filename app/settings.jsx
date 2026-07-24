@@ -674,12 +674,6 @@ export default function SettingsScreen() {
               description="Set owner, admin, or member access for your organization"
               onPress={() => router.push("/manageusers")}
             />
-            <NavRow
-              label="Approvals"
-              description="Approve or deny teammates who joined with your org key"
-              onPress={() => router.push("/approvals")}
-              badge={subscriptionStatus?.pendingApprovals?.length ?? 0}
-            />
           </Guard>
           <NavRow
             label="Unassigned Records"
@@ -845,7 +839,10 @@ function SubscriptionSection({
             <Text style={rowStyles.label}>Billing</Text>
             <Text style={rowStyles.description}>
               Managed by {billingOwnerName} — only they can approve teammates or
-              change the plan
+              change the plan.
+              {(status?.seatsNeeded ?? 0) > 0
+                ? ` ${status.seatsNeeded} teammate${status.seatsNeeded === 1 ? "" : "s"} waiting — let ${billingOwnerName} know so they can review.`
+                : ""}
             </Text>
           </View>
         </View>

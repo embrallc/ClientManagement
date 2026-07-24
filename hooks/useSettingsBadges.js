@@ -1,11 +1,18 @@
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { useSubscriptionStore } from "../stores/useSubscriptionStore";
 
-// Teammates waiting for the owner to approve/deny a seat. The server returns an
-// empty pendingApprovals list to everyone except the owner, so this is always 0
-// for members — they never see an approvals count.
+// Teammates waiting on a seat decision. Only the BILLING OWNER can act on these
+// (Approve = buy a seat) and is the only one with an Approvals entry in Settings
+// (the SUBSCRIPTION "Review Approvals" row). So the badge counts for them alone —
+// otherwise a non-billing co-owner would light up the Settings tab with no row
+// inside to resolve it. Co-owners remove teammates from Manage Users instead.
+// (Members always get an empty pendingApprovals list from the server anyway.)
 export function usePendingApprovalsCount() {
-  return useSubscriptionStore((s) => s.status?.pendingApprovals?.length ?? 0);
+  return useSubscriptionStore((s) =>
+    s.status?.isBillingOwner === true
+      ? (s.status?.pendingApprovals?.length ?? 0)
+      : 0,
+  );
 }
 
 // Single source of truth for the aggregate red badge on the Settings (menu)

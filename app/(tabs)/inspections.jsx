@@ -16,8 +16,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import InspectionCard from "../../components/InspectionCard";
 import NotificationBadge from "../../components/NotificationBadge";
 import { useSettingsBadgeTotal } from "../../hooks/useSettingsBadges";
-import { runDevQuery } from "../../db/devQuery";
-import { getAllLogs, logError } from "../../db/logs";
+import { logError } from "../../db/logs";
 import { useDebouncedPress } from "../../hooks/useDebouncedPress";
 import { useInspectionStore } from "../../stores/useInspectionStore";
 import { useMapStore } from "../../stores/useMapStore";
@@ -145,7 +144,6 @@ export default function InspectionsScreen() {
 
           <TouchableOpacity
             onPress={handleSettings}
-            onLongPress={__DEV__ ? runDevQuery : undefined}
             hitSlop={theme.layout.hitSlop.medium}
             style={styles.headerBtn}
           >
@@ -220,7 +218,6 @@ export default function InspectionsScreen() {
         <TouchableOpacity
           style={styles.fab}
           onPress={handleAdd}
-          onLongPress={__DEV__ ? () => getAllLogs() : undefined}
           activeOpacity={0.85}
         >
           <MaterialCommunityIcons

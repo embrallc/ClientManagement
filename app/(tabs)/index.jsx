@@ -20,7 +20,6 @@ import InspectionCard from "../../components/InspectionCard";
 import MyDayDashboard from "../../components/MyDayDashboard";
 import NotificationBadge from "../../components/NotificationBadge";
 import OwnerSetupCard from "../../components/OwnerSetupCard";
-import { runDevQuery } from "../../db/devQuery";
 import { DB_EVENTS, subscribe } from "../../db/events";
 import {
   getAllInspections,
@@ -309,7 +308,6 @@ export default function MyDayScreen() {
 
           <TouchableOpacity
             onPress={handleSettings}
-            onLongPress={__DEV__ ? runDevQuery : undefined}
             hitSlop={theme.layout.hitSlop.medium}
             style={styles.headerBtn}
           >

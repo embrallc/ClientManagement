@@ -15,7 +15,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { wipeDatabase } from "../db/devQuery";
 import { logError, logEvent } from "../db/logs";
 import { isOnline } from "../utils/connectivity";
 import { supabase } from "../utils/supabase";
@@ -329,7 +328,6 @@ export default function LoginScreen() {
             <TouchableOpacity
               style={styles.toggleBtn}
               onPress={toggleMode}
-              onLongPress={__DEV__ ? () => wipeDatabase() : undefined} // dev client only; no-op in release builds
               disabled={loading}
             >
               <Text style={styles.toggleText}>

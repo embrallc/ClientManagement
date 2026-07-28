@@ -211,14 +211,19 @@ export default function ManageUsersScreen() {
       <View style={styles.userRow}>
         <View style={styles.userHeader}>
           <View style={styles.userNameWrap}>
-            <Text style={styles.userName} numberOfLines={1}>
-              {displayName(item)}
+            <View style={styles.userNameLine}>
+              <Text style={styles.userName} numberOfLines={1}>
+                {displayName(item)}
+              </Text>
+              {isSelf && (
+                <View style={styles.youBadge}>
+                  <Text style={styles.youBadgeText}>YOU</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.userId} numberOfLines={1}>
+              {item.id}
             </Text>
-            {isSelf && (
-              <View style={styles.youBadge}>
-                <Text style={styles.youBadgeText}>YOU</Text>
-              </View>
-            )}
           </View>
           <View style={styles.headerActions}>
             {isBillingOwner && (
@@ -391,14 +396,21 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.s,
   },
   userNameWrap: {
+    flex: 1,
+  },
+  userNameLine: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing.s,
-    flex: 1,
   },
   userName: {
     ...theme.typography.bodyBold,
     flexShrink: 1,
+  },
+  userId: {
+    ...theme.typography.caption,
+    color: theme.colors.textFine,
+    marginTop: 2,
   },
   youBadge: {
     backgroundColor: theme.colors.primaryGhost,

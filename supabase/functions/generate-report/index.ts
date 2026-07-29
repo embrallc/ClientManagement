@@ -127,6 +127,24 @@ function formatDate(iso: string | null, tzOffsetMin: number, withTime: boolean) 
   return out;
 }
 
+// Assemble address forms from the inspection's parts (empty parts skipped).
+function inspStr(inspection: Record<string, unknown>, col: string): string {
+  const v = inspection[col];
+  return v == null ? "" : String(v).trim();
+}
+function addressStreet(inspection: Record<string, unknown>): string {
+  return [inspStr(inspection, "address_line1"), inspStr(inspection, "address_line2")]
+    .filter(Boolean).join(", ");
+}
+function cityStateZip(inspection: Record<string, unknown>): string {
+  const cityState = [inspStr(inspection, "city"), inspStr(inspection, "state")]
+    .filter(Boolean).join(", ");
+  return [cityState, inspStr(inspection, "zip_code")].filter(Boolean).join(" ");
+}
+function addressFull(inspection: Record<string, unknown>): string {
+  return [addressStreet(inspection), cityStateZip(inspection)].filter(Boolean).join(", ");
+}
+
 function severityColor(value: string): string | null {
   const v = (value ?? "").toLowerCase();
   // Canonical scale first (label or key match), then a loose legacy fallback.
@@ -256,6 +274,16 @@ function resolveBinding(key: string, ctx: Ctx, scope: SectionScope | null): stri
       true,
     );
   }
+  if (key === "inspection.scheduledDate") {
+    return formatDate(
+      (ctx.inspection["scheduled_at"] as string) ?? null,
+      ctx.tzOffsetMin,
+      false,
+    );
+  }
+  if (key === "inspection.addressFull") return addressFull(ctx.inspection);
+  if (key === "inspection.addressStreet") return addressStreet(ctx.inspection);
+  if (key === "inspection.addressCityStateZip") return cityStateZip(ctx.inspection);
   if (key.startsWith("inspection.")) {
     const col = camelToSnake(key.slice("inspection.".length));
     const v = ctx.inspection[col];

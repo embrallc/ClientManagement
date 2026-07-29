@@ -33,6 +33,36 @@ export async function setOrgTimezone(orgSk, timezone) {
   return true;
 }
 
+// The company name shown on client-facing reports (report.orgName binding).
+// Read fails soft (returns null); the caller shows a placeholder.
+export async function getOrgName(orgSk) {
+  if (!orgSk) return null;
+  try {
+    const { data, error } = await supabase
+      .from("organizations")
+      .select("org_name")
+      .eq("org_sk", orgSk)
+      .maybeSingle();
+    if (error) throw error;
+    return data?.org_name ?? null;
+  } catch (e) {
+    logError(e, `db/organizations.getOrgName orgSk=${orgSk}`);
+    return null;
+  }
+}
+
+// Owner-only (RLS auth_uid_owns_org; column grant in 20260728000000). Throws on
+// failure (incl. RLS reject) so the caller can revert its optimistic UI. The
+// write is immediate — reports read org_name fresh from the cloud at generation.
+export async function setOrgName(orgSk, name) {
+  const { error } = await supabase
+    .from("organizations")
+    .update({ org_name: name })
+    .eq("org_sk", orgSk);
+  if (error) throw error;
+  return true;
+}
+
 // Stripe Connect: the org's connected-account capability flags (server-truth,
 // written by the onboarding/webhook EFs) + the owner auto-comms policy toggles.
 // Read-only here; capability columns can't be written by the client (column-level

@@ -1,5 +1,6 @@
 User-agent: *
 Allow: /
 Disallow: /confirmed
+Disallow: /reset-password
 
 Sitemap: https://getzanbi.com/sitemap.xml

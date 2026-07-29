@@ -50,3 +50,27 @@ describe("bindingByKey", () => {
     expect(bindingByKey(undefined)).toBeNull();
   });
 });
+
+describe("pre-populated report fields", () => {
+  it("exposes the concatenated-address + date-only bindings in the property group", () => {
+    const property = FORM_BINDINGS.groups.find((g) => g.id === "property");
+    const keys = property.fields.map((f) => f.key);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        "inspection.addressFull",
+        "inspection.addressStreet",
+        "inspection.addressCityStateZip",
+        "inspection.scheduledDate",
+      ]),
+    );
+    expect(bindingByKey("inspection.addressFull").type).toBe("text");
+    expect(bindingByKey("inspection.addressStreet").type).toBe("text");
+    expect(bindingByKey("inspection.addressCityStateZip").type).toBe("text");
+    expect(bindingByKey("inspection.scheduledDate").type).toBe("date");
+  });
+
+  it("relabels the combined field so it is not confused with date-only", () => {
+    expect(bindingByKey("inspection.scheduledAt").label).toBe("Inspection Date & Time");
+    expect(bindingByKey("inspection.scheduledDate").label).toBe("Inspection Date");
+  });
+});

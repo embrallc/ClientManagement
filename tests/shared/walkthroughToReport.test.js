@@ -145,6 +145,20 @@ describe("walkthroughToReport", () => {
     );
   });
 
+  it("pre-populates the header with company, report date, inspector, and inspection date", () => {
+    const report = walkthroughToReport(SCHEMA);
+    const header = report.bands.find((b) => b.name === "Report Header");
+    const bindings = header.elements.filter((e) => e.type === "field").map((e) => e.binding);
+    expect(bindings).toEqual(
+      expect.arrayContaining([
+        "report.orgName",
+        "report.generatedDate",
+        "report.inspectorName",
+        "inspection.scheduledDate",
+      ]),
+    );
+  });
+
   it("lays out a multiline text field as a taller box, a line field as a plain row", () => {
     const report = walkthroughToReport(SCHEMA);
     const summary = report.bands.find((b) => b.name === "Summary");

@@ -8,7 +8,7 @@ import {
   rootGroupOf,
   snap,
 } from "../schema";
-import { snapWithGuides } from "../dnd";
+import { snapResize, snapWithGuides } from "../dnd";
 
 // Pointer-based move/resize for elements and shapes. One gesture = one undo
 // step: beginHistory() fires at pointerdown, every pointermove is transient.
@@ -44,6 +44,35 @@ export function useDragNode({ kind, bandId, id }) {
       const onMove = (ev) => {
         const dx = (ev.clientX - px) / zoom;
         const dy = (ev.clientY - py) / zoom;
+        const st = useEditorStore.getState();
+        // Try smart edge-snapping to sibling edges/centers first (Alt = free).
+        if (!ev.altKey) {
+          const raw = { ...start };
+          if (mode.includes("e")) raw.w = start.w + dx;
+          if (mode.includes("s")) raw.h = start.h + dy;
+          if (mode.includes("w")) {
+            raw.w = start.w - dx;
+            raw.x = start.x + dx;
+          }
+          if (mode.includes("n")) {
+            raw.h = start.h - dy;
+            raw.y = start.y + dy;
+          }
+          const b = st.schema.bands.find((bb) => bb.id === bandId);
+          const siblings = [...b.shapes, ...b.elements].filter((n) => n.id !== id);
+          const r = snapResize(raw, mode, siblings, BAND_W);
+          if (r.guides.length) {
+            st.setGuides(r.guides.map((g) => ({ ...g, bandId })));
+            st.updateNode(
+              sel,
+              { frame: { x: r.x, y: r.y, w: r.w, h: r.h } },
+              { transient: true },
+            );
+            return;
+          }
+        }
+        // No sibling snap (or Alt): grid-snap the active edges (Alt = whole-px).
+        st.setGuides([]);
         const frame = { ...start };
         if (mode.includes("e")) frame.w = snap(start.w + dx, ev.altKey);
         if (mode.includes("s")) frame.h = snap(start.h + dy, ev.altKey);
@@ -55,9 +84,10 @@ export function useDragNode({ kind, bandId, id }) {
           frame.h = snap(start.h - dy, ev.altKey);
           frame.y = start.y + (start.h - frame.h);
         }
-        useEditorStore.getState().updateNode(sel, { frame }, { transient: true });
+        st.updateNode(sel, { frame }, { transient: true });
       };
       const onUp = () => {
+        useEditorStore.getState().setGuides([]);
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
       };
@@ -117,21 +147,47 @@ export function useDragNode({ kind, bandId, id }) {
       return;
     }
 
-    // Group / multi: rigid-translate every leaf from its start frame (grid-snap
-    // the delta; no smart guides in v1).
+    // Group / multi: rigid-translate every leaf from its start frame, snapping
+    // the selection's bounding box to non-selected siblings (Alt = free).
     const bandNow = useEditorStore.getState().schema.bands.find((b) => b.id === bandId);
     const leafIds = [...new Set(dragIds.flatMap((oid) => objectLeafIds(bandNow, oid)))];
+    const leafSet = new Set(leafIds);
     const starts = new Map();
     for (const lid of leafIds) {
       const f = findNode(bandNow, lid)?.node?.frame;
-      if (f) starts.set(lid, { x: f.x, y: f.y });
+      if (f) starts.set(lid, { x: f.x, y: f.y, w: f.w, h: f.h });
     }
+    // Bounding box of the whole selection at drag start — snapped as one unit.
+    const sf = [...starts.values()];
+    const bx = Math.min(...sf.map((f) => f.x));
+    const by = Math.min(...sf.map((f) => f.y));
+    const bbox = {
+      x: bx,
+      y: by,
+      w: Math.max(...sf.map((f) => f.x + f.w)) - bx,
+      h: Math.max(...sf.map((f) => f.y + f.h)) - by,
+    };
     const onMove = (ev) => {
       let dx = (ev.clientX - px) / zoom;
       let dy = (ev.clientY - py) / zoom;
-      if (!ev.altKey) {
-        dx = snap(dx);
-        dy = snap(dy);
+      const st = useEditorStore.getState();
+      if (ev.altKey) {
+        st.setGuides([]);
+      } else {
+        // Snap the selection bbox to non-selected siblings; apply the correction
+        // to the delta so every leaf rigid-translates together. Grid-snap per
+        // axis only when that axis found no guide.
+        const b = st.schema.bands.find((bb) => bb.id === bandId);
+        const siblings = [...b.shapes, ...b.elements].filter(
+          (n) => !leafSet.has(n.id),
+        );
+        const tentative = { ...bbox, x: bbox.x + dx, y: bbox.y + dy };
+        const res = snapWithGuides(tentative, siblings, BAND_W);
+        dx += res.x - tentative.x;
+        dy += res.y - tentative.y;
+        if (!res.guides.some((g) => g.axis === "x")) dx = snap(dx);
+        if (!res.guides.some((g) => g.axis === "y")) dy = snap(dy);
+        st.setGuides(res.guides.map((g) => ({ ...g, bandId })));
       }
       useEditorStore.setState((state) => ({
         schema: produce(state.schema, (d) => {
@@ -149,6 +205,7 @@ export function useDragNode({ kind, bandId, id }) {
       }));
     };
     const onUp = () => {
+      useEditorStore.getState().setGuides([]);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };

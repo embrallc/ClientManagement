@@ -46,7 +46,12 @@ export const FORM_BINDINGS = {
         { key: "inspection.city", label: "City", type: "text", source: "Inspections.City", scope: "static" },
         { key: "inspection.state", label: "State", type: "text", source: "Inspections.State", scope: "static" },
         { key: "inspection.zipCode", label: "Zip Code", type: "text", source: "Inspections.ZipCode", scope: "static" },
-        { key: "inspection.scheduledAt", label: "Inspection Date", type: "date", source: "Inspections.ScheduledAt", scope: "static" },
+        // Pre-assembled address forms (computed at generation time from the parts above).
+        { key: "inspection.addressFull", label: "Full Address (1 line)", type: "text", source: "computed:addressFull", scope: "static" },
+        { key: "inspection.addressStreet", label: "Address — Street Line", type: "text", source: "computed:addressStreet", scope: "static" },
+        { key: "inspection.addressCityStateZip", label: "Address — City, State ZIP", type: "text", source: "computed:addressCityStateZip", scope: "static" },
+        { key: "inspection.scheduledAt", label: "Inspection Date & Time", type: "date", source: "Inspections.ScheduledAt", scope: "static" },
+        { key: "inspection.scheduledDate", label: "Inspection Date", type: "date", source: "computed:scheduledDate", scope: "static" },
       ],
     },
     {

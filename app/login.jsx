@@ -24,6 +24,7 @@ export default function LoginScreen() {
   const [mode, setMode] = useState("signin"); // "signin" | "signup"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [orgMode, setOrgMode] = useState("create"); // "create" | "join"
   const [orgName, setOrgName] = useState("");
   const [orgId, setOrgId] = useState("");
@@ -32,6 +33,8 @@ export default function LoginScreen() {
   const [sentTo, setSentTo] = useState(null); // email we sent a verify link to
   const [resending, setResending] = useState(false);
   const [resendNote, setResendNote] = useState(null);
+  const [resetSentTo, setResetSentTo] = useState(null); // email we sent a reset link to
+  const [resetting, setResetting] = useState(false);
 
   async function handleSubmit() {
     if (!email.trim() || !password) {
@@ -128,8 +131,41 @@ export default function LoginScreen() {
     }
   }
 
+  // Send a password-reset link. The email (via Resend, our Auth SMTP) lands the
+  // user on the getzanbi.com/reset-password page, where they set a new password
+  // (implicit flow → the recovery token rides the URL hash, no device verifier).
+  async function handleForgotPassword() {
+    if (resetting) return;
+    const target = email.trim();
+    if (!target) {
+      setError("Enter your email above, then tap “Forgot password?”");
+      return;
+    }
+    if (!isOnline()) {
+      setError("You're offline — connect to the internet to reset your password.");
+      return;
+    }
+    setResetting(true);
+    setError(null);
+    try {
+      const siteUrl = process.env.EXPO_PUBLIC_SITE_URL?.replace(/\/$/, "");
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+        target,
+        siteUrl ? { redirectTo: `${siteUrl}/reset-password` } : undefined,
+      );
+      if (resetError) throw resetError;
+      setResetSentTo(target);
+    } catch (e) {
+      logError(e, "login.handleForgotPassword");
+      setError(e.message ?? "Couldn't send a reset link just now. Try again shortly.");
+    } finally {
+      setResetting(false);
+    }
+  }
+
   function backToSignIn() {
     setSentTo(null);
+    setResetSentTo(null);
     setResendNote(null);
     setError(null);
     setMode("signin");
@@ -212,6 +248,46 @@ export default function LoginScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+          ) : resetSentTo ? (
+            <View style={styles.card}>
+              <View style={styles.confirmIcon}>
+                <MaterialCommunityIcons
+                  name="lock-reset"
+                  size={36}
+                  color={theme.colors.primary}
+                />
+              </View>
+              <Text style={styles.confirmTitle}>Check your email</Text>
+              <Text style={styles.confirmBody}>
+                If an account exists for{" "}
+                <Text style={styles.confirmEmail}>{resetSentTo}</Text>, we've sent
+                a password reset link. Open it on this device, choose a new
+                password, then come back here to sign in.
+              </Text>
+              <Text style={styles.confirmHint}>
+                Don't see it? Check your spam folder — it can take a minute to
+                arrive.
+              </Text>
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={backToSignIn}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.primaryBtnText}>Back to Sign In</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.toggleBtn}
+                onPress={handleForgotPassword}
+                disabled={resetting}
+              >
+                <Text style={styles.toggleText}>
+                  Didn't get it?{" "}
+                  <Text style={styles.toggleLink}>
+                    {resetting ? "Sending…" : "Resend link"}
+                  </Text>
+                </Text>
+              </TouchableOpacity>
+            </View>
           ) : (
           /* Card */
           <View style={styles.card}>
@@ -244,16 +320,49 @@ export default function LoginScreen() {
             />
 
             <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder={isSignIn ? "Your password" : "At least 6 characters"}
-              placeholderTextColor={theme.colors.textFine}
-              secureTextEntry
-              returnKeyType={isSignIn ? "done" : "next"}
-              onSubmitEditing={isSignIn ? handleSubmit : undefined}
-            />
+            <View style={styles.passwordWrap}>
+              <TextInput
+                style={[styles.input, styles.passwordInput]}
+                value={password}
+                onChangeText={setPassword}
+                placeholder={isSignIn ? "Your password" : "At least 6 characters"}
+                placeholderTextColor={theme.colors.textFine}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType={isSignIn ? "done" : "next"}
+                onSubmitEditing={isSignIn ? handleSubmit : undefined}
+              />
+              <TouchableOpacity
+                style={styles.eyeBtn}
+                onPress={() => setShowPassword((v) => !v)}
+                hitSlop={theme.layout.hitSlop.medium}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  showPassword ? "Hide password" : "Show password"
+                }
+              >
+                <MaterialCommunityIcons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={20}
+                  color={theme.colors.textSubtle}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {isSignIn && (
+              <TouchableOpacity
+                style={styles.forgotBtn}
+                onPress={handleForgotPassword}
+                disabled={resetting}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.forgotText}>
+                  {resetting ? "Sending…" : "Forgot password?"}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {/* Org fields — signup only */}
             {!isSignIn && (
@@ -465,6 +574,32 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     ...theme.typography.body,
     color: theme.colors.text,
+  },
+  passwordWrap: {
+    position: "relative",
+    justifyContent: "center",
+  },
+  passwordInput: {
+    paddingRight: 48, // room for the show/hide eye button
+  },
+  eyeBtn: {
+    position: "absolute",
+    right: 4,
+    top: 0,
+    bottom: 0,
+    width: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  forgotBtn: {
+    alignSelf: "flex-end",
+    paddingVertical: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+  },
+  forgotText: {
+    ...theme.typography.caption,
+    color: theme.colors.primary,
+    fontWeight: "600",
   },
   hint: {
     ...theme.typography.caption,

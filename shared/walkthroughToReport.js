@@ -163,17 +163,28 @@ function layoutFields(b, fields, startY) {
 export function walkthroughToReport(schema) {
   const bands = [];
 
-  // Header — brand bar with company name + report date.
-  const header = band("static", "Report Header", 120);
-  header.shapes.push(rectShape(0, 0, BAND_W, 92, BRAND, 14));
+  // Header — brand bar: company + report date, then inspector + inspection date.
+  const header = band("static", "Report Header", 140);
+  header.shapes.push(rectShape(0, 0, BAND_W, 112, BRAND, 14));
   header.elements.push(
-    textEl(24, 20, 460, 32, "Inspection Report", { fontSize: 22, color: "#FFFFFF" }, true),
-    fieldEl(24, 58, 320, 20, "report.orgName", "Company Name", {
+    textEl(24, 18, 460, 30, "Inspection Report", { fontSize: 22, color: "#FFFFFF" }, true),
+    fieldEl(24, 56, 320, 18, "report.orgName", "Company Name", {
       variant: "plain",
       color: "#E4E6FF",
       fontSize: 13,
     }),
-    fieldEl(470, 58, 226, 20, "report.generatedDate", "Report Date", {
+    fieldEl(470, 56, 226, 18, "report.generatedDate", "Report Date", {
+      variant: "plain",
+      color: "#E4E6FF",
+      fontSize: 13,
+      align: "right",
+    }),
+    fieldEl(24, 82, 360, 18, "report.inspectorName", "Inspector Name", {
+      variant: "plain",
+      color: "#E4E6FF",
+      fontSize: 13,
+    }),
+    fieldEl(470, 82, 226, 18, "inspection.scheduledDate", "Inspection Date", {
       variant: "plain",
       color: "#E4E6FF",
       fontSize: 13,

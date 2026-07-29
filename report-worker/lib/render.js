@@ -93,6 +93,24 @@ function formatDate(iso, tzOffsetMin, withTime) {
   return out;
 }
 
+// Assemble address forms from the inspection's parts (empty parts skipped).
+function inspStr(inspection, col) {
+  const v = inspection[col];
+  return v == null ? "" : String(v).trim();
+}
+function addressStreet(inspection) {
+  return [inspStr(inspection, "address_line1"), inspStr(inspection, "address_line2")]
+    .filter(Boolean).join(", ");
+}
+function cityStateZip(inspection) {
+  const cityState = [inspStr(inspection, "city"), inspStr(inspection, "state")]
+    .filter(Boolean).join(", ");
+  return [cityState, inspStr(inspection, "zip_code")].filter(Boolean).join(" ");
+}
+function addressFull(inspection) {
+  return [addressStreet(inspection), cityStateZip(inspection)].filter(Boolean).join(", ");
+}
+
 function severityColor(value) {
   const v = (value ?? "").toLowerCase();
   for (const lvl of SEVERITY_LEVELS) {
@@ -176,6 +194,12 @@ function resolveBinding(key, ctx, scope) {
   if (key === "inspection.scheduledAt") {
     return formatDate(ctx.inspection["scheduled_at"] ?? null, ctx.tzOffsetMin, true);
   }
+  if (key === "inspection.scheduledDate") {
+    return formatDate(ctx.inspection["scheduled_at"] ?? null, ctx.tzOffsetMin, false);
+  }
+  if (key === "inspection.addressFull") return addressFull(ctx.inspection);
+  if (key === "inspection.addressStreet") return addressStreet(ctx.inspection);
+  if (key === "inspection.addressCityStateZip") return cityStateZip(ctx.inspection);
   if (key.startsWith("inspection.")) {
     const col = camelToSnake(key.slice("inspection.".length));
     const v = ctx.inspection[col];

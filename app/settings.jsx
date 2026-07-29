@@ -20,7 +20,12 @@ import { Guard } from "../components/Guard";
 import NotificationBadge from "../components/NotificationBadge";
 import { getAllInspections } from "../db/inspections";
 import { logError } from "../db/logs";
-import { getOrgTimezone, setOrgTimezone } from "../db/organizations";
+import {
+  getOrgName,
+  getOrgTimezone,
+  setOrgName,
+  setOrgTimezone,
+} from "../db/organizations";
 import { updateUserName } from "../db/users";
 import { useInspectionStore } from "../stores/useInspectionStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
@@ -483,7 +488,18 @@ export default function SettingsScreen() {
             returnKeyType="done"
           />
 
-          {(userProfile === "owner" || userProfile === "admin") && orgSk && (
+          <Guard guard={userProfile === "owner" && !!orgSk}>
+            <>
+              <View style={styles.fieldDivider} />
+              <CompanyNameField orgSk={orgSk} />
+            </>
+          </Guard>
+
+          <Guard
+            guard={
+              (userProfile === "owner" || userProfile === "admin") && !!orgSk
+            }
+          >
             <>
               <View style={styles.fieldDivider} />
               <Text style={styles.fieldLabel}>Organization ID</Text>
@@ -509,7 +525,7 @@ export default function SettingsScreen() {
                 when they sign up.
               </Text>
             </>
-          )}
+          </Guard>
         </View>
 
         <Text style={styles.sectionLabel}>ARCHIVE</Text>
@@ -1116,6 +1132,155 @@ function detectDefaultTz() {
 // organizations.timezone server-side to decide each org's "tomorrow" and the
 // local send hour, so it must be an org setting (not per-device). Only the owner
 // can write it (RLS: auth_uid_owns_org); any seat may read it.
+// Owner-only editable company name (the name printed on client reports via the
+// report.orgName binding). Renders read-only with a pencil; tapping it reveals an
+// input + check to submit. The write goes straight to the cloud org row (RLS
+// auth_uid_owns_org — owner-only), so it takes effect immediately; reports read
+// org_name fresh at generation time. Optimistic with revert on failure.
+function CompanyNameField({ orgSk }) {
+  const [name, setName] = useState(null); // saved value
+  const [draft, setDraft] = useState(""); // edit buffer
+  const [editing, setEditing] = useState(false);
+  // 'loading' | 'idle' | 'saving' | 'error'
+  const [status, setStatus] = useState("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const n = await getOrgName(orgSk);
+      if (cancelled) return;
+      setName(n ?? "");
+      setStatus("idle");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orgSk]);
+
+  function startEdit() {
+    setDraft(name ?? "");
+    setEditing(true);
+    if (status === "error") setStatus("idle");
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+    setDraft("");
+    if (status === "error") setStatus("idle");
+  }
+
+  async function submit() {
+    if (status === "saving") return;
+    const next = draft.trim();
+    if (!next) {
+      setStatus("error"); // company name can't be blank
+      return;
+    }
+    if (next === (name ?? "")) {
+      cancelEdit(); // no change
+      return;
+    }
+    const prev = name;
+    setName(next); // optimistic
+    setEditing(false);
+    setStatus("saving");
+    try {
+      await setOrgName(orgSk, next);
+      setStatus("idle");
+    } catch (e) {
+      logError(e, "SettingsScreen.CompanyNameField.set");
+      setName(prev); // revert
+      setDraft(next);
+      setEditing(true); // reopen so they can retry
+      setStatus("error");
+    }
+  }
+
+  return (
+    <View>
+      <View style={styles.companyNameHeader}>
+        <Text style={styles.fieldLabel}>Company name</Text>
+        {status === "saving" && (
+          <ActivityIndicator size="small" color={theme.colors.primary} />
+        )}
+        {status === "error" && (
+          <MaterialCommunityIcons
+            name="alert-circle-outline"
+            size={16}
+            color={theme.colors.error}
+          />
+        )}
+      </View>
+
+      {editing ? (
+        <View style={styles.orgIdRow}>
+          <TextInput
+            style={[styles.fieldInput, styles.companyNameInput]}
+            value={draft}
+            onChangeText={setDraft}
+            placeholder="Enter your company name"
+            placeholderTextColor={theme.colors.textFine}
+            autoCapitalize="words"
+            autoCorrect={false}
+            autoFocus
+            maxLength={80}
+            returnKeyType="done"
+            onSubmitEditing={submit}
+          />
+          <TouchableOpacity
+            style={styles.orgIdShareBtn}
+            onPress={submit}
+            disabled={status === "saving"}
+            hitSlop={theme.layout.hitSlop.medium}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="check"
+              size={20}
+              color={theme.colors.primary}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.companyNameCancelBtn}
+            onPress={cancelEdit}
+            hitSlop={theme.layout.hitSlop.medium}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="close"
+              size={20}
+              color={theme.colors.textSubtle}
+            />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.orgIdRow}>
+          <Text style={styles.orgIdValue} numberOfLines={1}>
+            {status === "loading" ? "…" : name || "Not set"}
+          </Text>
+          <TouchableOpacity
+            style={styles.orgIdShareBtn}
+            onPress={startEdit}
+            disabled={status === "loading"}
+            hitSlop={theme.layout.hitSlop.medium}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="pencil-outline"
+              size={18}
+              color={theme.colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <Text style={styles.orgIdHint}>
+        This is the name shown on the reports your clients receive.
+      </Text>
+    </View>
+  );
+}
+
 function BusinessTimezoneCard({ orgSk }) {
   const [savedTz, setSavedTz] = useState(null);
   const [detected] = useState(detectDefaultTz);
@@ -1438,6 +1603,20 @@ const styles = StyleSheet.create({
     color: theme.colors.textFine,
     marginTop: 2,
     marginBottom: theme.spacing.xs,
+  },
+  companyNameHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.s,
+  },
+  companyNameInput: {
+    flex: 1,
+  },
+  companyNameCancelBtn: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
   },
   syncRow: {
     flexDirection: "row",

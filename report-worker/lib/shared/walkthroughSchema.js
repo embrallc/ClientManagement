@@ -41,6 +41,9 @@ export const FIELD_TYPES = {
   checkbox: { label: "Multiple choice", hasAnswer: true }, //  [option id]
   photo: { label: "Photos", hasAnswer: true }, //  [PhotoRef]
   severity: { label: "Severity", hasAnswer: true }, //  severity key
+  dropdown: { label: "Dropdown", hasAnswer: true }, //  option id (like radio)
+  measurement: { label: "Measurement", hasAnswer: true }, //  numeric string + config.unit
+  date: { label: "Date", hasAnswer: true }, //  ISO "YYYY-MM-DD" string
 };
 
 // text field looks — mirrors the report builder's field-element variants so

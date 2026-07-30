@@ -183,9 +183,10 @@ function roundedRectPath(w: number, h: number, r: number): string {
 type FieldMeta = {
   sectionId: string;
   sectionKind: string;
-  type: string; // text|toggle|radio|checkbox|severity|photo|heading
+  type: string; // text|toggle|radio|checkbox|severity|photo|heading|dropdown|measurement|date
   label: string;
   options: { id: string; label: string }[] | null;
+  unit: string | null; // measurement fields only
 };
 
 // A walkthrough section INSTANCE being stamped (one per repeatable instance).
@@ -213,6 +214,7 @@ function formatFieldValue(meta: FieldMeta, value: unknown): string {
     case "toggle":
       return value === true ? "Yes" : value === false ? "No" : "";
     case "radio":
+    case "dropdown":
       return (meta.options ?? []).find((o) => o.id === value)?.label ?? "";
     case "checkbox":
       if (!Array.isArray(value)) return "";
@@ -223,9 +225,30 @@ function formatFieldValue(meta: FieldMeta, value: unknown): string {
     case "severity":
       // deno-lint-ignore no-explicit-any
       return SEVERITY_LEVELS.find((l: any) => l.key === value)?.label ?? String(value);
+    case "measurement": {
+      const v = typeof value === "string" ? value.trim() : String(value);
+      if (!v) return "";
+      return meta.unit ? `${v} ${meta.unit}` : v;
+    }
+    case "date":
+      return typeof value === "string" ? formatDateOnly(value) : "";
     default:
       return typeof value === "string" ? value : String(value);
   }
+}
+
+// A walkthrough date field stores an ISO "YYYY-MM-DD" string; print it in a
+// readable, locale-free form without any timezone shift.
+const DATE_MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+function formatDateOnly(s: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (!m) return s;
+  const mi = parseInt(m[2], 10) - 1;
+  if (mi < 0 || mi > 11) return s;
+  return `${DATE_MONTHS[mi]} ${parseInt(m[3], 10)}, ${m[1]}`;
 }
 
 // The walkthrough field a binding points at (wt.<fieldId>), or null.
@@ -711,6 +734,7 @@ serve(async (req) => {
           type: f.type,
           label: f.label,
           options: f.config?.options ?? null,
+          unit: f.config?.unit ?? null,
         });
       }
       if (sec.kind === "static") {

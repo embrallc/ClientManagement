@@ -417,7 +417,18 @@ export default function InspectionFormScreen() {
         const lvl = SEVERITY_LEVELS.find((l) => l.key === value);
         return lvl?.label ?? null;
       }
+      case "dropdown": {
+        const o = (field.config?.options ?? []).find((x) => x.id === value);
+        return o?.label ?? null;
+      }
+      case "measurement": {
+        const v = typeof value === "string" ? value.trim() : value;
+        if (v == null || v === "") return null;
+        const unit = field.config?.unit ? ` ${field.config.unit}` : "";
+        return `${v}${unit}`;
+      }
       case "text":
+      case "date":
         return typeof value === "string" && value.trim() ? value.trim() : null;
       default:
         return null;
@@ -605,7 +616,9 @@ export default function InspectionFormScreen() {
           />
         );
       }
-      const rerender = f.type !== "text";
+      // Text + measurement manage their own local input state, so skip the
+      // parent re-render per keystroke; everything else reflects on change.
+      const rerender = f.type !== "text" && f.type !== "measurement";
       return (
         <WalkField
           key={f.id}

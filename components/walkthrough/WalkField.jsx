@@ -1,5 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { theme } from "@theme";
+import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -226,6 +228,197 @@ function SeverityField({ field, value, onChange }) {
           );
         })}
       </View>
+    </View>
+  );
+}
+
+// ── Dropdown (single choice from a tap-to-open list) ─────────────────────────
+// Same stored value as radio (an option id) — just a compact picker for long
+// option lists, with a search box once the list gets long.
+function DropdownField({ field, value, onChange }) {
+  const opts = field.config?.options ?? [];
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const selected = opts.find((o) => o.id === value) ?? null;
+  const searchable = opts.length > 8;
+  const q = query.trim().toLowerCase();
+  const filtered = q ? opts.filter((o) => o.label.toLowerCase().includes(q)) : opts;
+
+  return (
+    <View style={s.block}>
+      <FieldLabel field={field} />
+      <TouchableOpacity
+        style={s.selectBox}
+        onPress={() => {
+          setQuery("");
+          setOpen(true);
+        }}
+        activeOpacity={0.7}
+      >
+        <Text
+          style={[s.selectTxt, !selected && s.selectPlaceholder]}
+          numberOfLines={1}
+        >
+          {selected ? selected.label : "Choose…"}
+        </Text>
+        <MaterialCommunityIcons
+          name="chevron-down"
+          size={20}
+          color={theme?.colors?.textSubtle}
+        />
+      </TouchableOpacity>
+
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+      >
+        <TouchableOpacity
+          style={s.ddBg}
+          activeOpacity={1}
+          onPress={() => setOpen(false)}
+        >
+          <View style={s.ddCard} onStartShouldSetResponder={() => true}>
+            <Text style={s.ddTitle}>{field.label}</Text>
+            {searchable && (
+              <TextInput
+                style={s.ddSearch}
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search…"
+                placeholderTextColor={theme?.colors?.textFine}
+                autoFocus
+              />
+            )}
+            <ScrollView style={s.ddList} keyboardShouldPersistTaps="handled">
+              {opts.length === 0 && (
+                <Text style={s.muted}>No options configured.</Text>
+              )}
+              {filtered.map((o) => {
+                const on = o.id === value;
+                return (
+                  <TouchableOpacity
+                    key={o.id}
+                    style={s.ddRow}
+                    onPress={() => {
+                      onChange(on ? null : o.id);
+                      setOpen(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.ddRowTxt, on && s.ddRowTxtOn]}>{o.label}</Text>
+                    {on && (
+                      <MaterialCommunityIcons
+                        name="check"
+                        size={18}
+                        color={theme?.colors?.primary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+              {opts.length > 0 && filtered.length === 0 && (
+                <Text style={s.muted}>No matches.</Text>
+              )}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </View>
+  );
+}
+
+// ── Measurement (number + fixed unit) ────────────────────────────────────────
+// Stored as a numeric string; the unit is configured on the field, shown as a
+// suffix, and appended on the report. Local state keeps typing smooth (like the
+// text field), so the parent skips a re-render per keystroke.
+function MeasurementField({ field, value, onChange }) {
+  const unit = field.config?.unit ?? "";
+  const [text, setText] = useState(value ?? "");
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused && (value ?? "") !== text) setText(value ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  const apply = (t) => {
+    // Keep digits, a single decimal point, and an optional leading minus.
+    const cleaned = t.replace(/[^0-9.-]/g, "");
+    setText(cleaned);
+    onChange(cleaned);
+  };
+
+  return (
+    <View style={s.block}>
+      <FieldLabel field={field} />
+      <View style={s.measureRow}>
+        <TextInput
+          style={s.measureInput}
+          value={text}
+          onChangeText={apply}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          keyboardType="numeric"
+          placeholder="0"
+          placeholderTextColor={theme?.colors?.textFine}
+        />
+        {!!unit && <Text style={s.measureUnit}>{unit}</Text>}
+      </View>
+    </View>
+  );
+}
+
+// ── Date ─────────────────────────────────────────────────────────────────────
+// Stored as an ISO "YYYY-MM-DD" string, built from local date parts to avoid a
+// UTC day-shift. Reuses the app's native date picker (iOS keeps it inline;
+// Android auto-dismisses).
+function DateField({ field, value, onChange }) {
+  const [show, setShow] = useState(false);
+  const current = value ? dayjs(value) : null;
+  const valid = current?.isValid();
+  const pickerDate = valid ? current.toDate() : new Date();
+
+  const onPick = (event, selected) => {
+    setShow(Platform.OS === "ios");
+    if (event?.type === "dismissed") {
+      setShow(false);
+      return;
+    }
+    if (selected) {
+      const y = selected.getFullYear();
+      const m = String(selected.getMonth() + 1).padStart(2, "0");
+      const d = String(selected.getDate()).padStart(2, "0");
+      onChange(`${y}-${m}-${d}`);
+    }
+  };
+
+  return (
+    <View style={s.block}>
+      <FieldLabel field={field} />
+      <TouchableOpacity
+        style={s.selectBox}
+        onPress={() => setShow(true)}
+        activeOpacity={0.7}
+      >
+        <Text style={[s.selectTxt, !valid && s.selectPlaceholder]}>
+          {valid ? current.format("MMM D, YYYY") : "Select a date"}
+        </Text>
+        <MaterialCommunityIcons
+          name="calendar"
+          size={18}
+          color={theme?.colors?.textSubtle}
+        />
+      </TouchableOpacity>
+      {show && (
+        <DateTimePicker
+          value={pickerDate}
+          mode="date"
+          display={Platform.OS === "ios" ? "inline" : "default"}
+          onChange={onPick}
+        />
+      )}
     </View>
   );
 }
@@ -492,10 +685,23 @@ export default function WalkField({ field, value, onChange, photo, ai }) {
       return <ChoiceField field={field} value={value} onChange={onChange} multi />;
     case "severity":
       return <SeverityField field={field} value={value} onChange={onChange} />;
+    case "dropdown":
+      return <DropdownField field={field} value={value} onChange={onChange} />;
+    case "measurement":
+      return <MeasurementField field={field} value={value} onChange={onChange} />;
+    case "date":
+      return <DateField field={field} value={value} onChange={onChange} />;
     case "photo":
       return <PhotoField field={field} value={value} photo={photo} />;
     default:
-      return null;
+      // An unknown field type (a form using a field this app build predates).
+      // Degrade gracefully instead of rendering a silent blank.
+      return (
+        <View style={s.block}>
+          <FieldLabel field={field} />
+          <Text style={s.muted}>Update the app to fill in this field.</Text>
+        </View>
+      );
   }
 }
 
@@ -624,6 +830,87 @@ const s = StyleSheet.create({
   },
   sevDot: { width: 7, height: 7, borderRadius: 4 },
   sevLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 0.3 },
+
+  // Dropdown / date select box
+  selectBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    backgroundColor: theme?.colors?.cardBackground,
+    borderRadius: theme?.layout?.borderRadius?.s ?? 8,
+    borderWidth: 1,
+    borderColor: theme?.colors?.input,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    minHeight: 44,
+  },
+  selectTxt: { fontSize: 15, color: theme?.colors?.text, flex: 1 },
+  selectPlaceholder: { color: theme?.colors?.textFine },
+
+  // Dropdown modal
+  ddBg: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  ddCard: {
+    backgroundColor: theme?.colors?.cardBackground,
+    borderRadius: 16,
+    padding: 16,
+    maxHeight: "70%",
+  },
+  ddTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: theme?.colors?.text,
+    marginBottom: 10,
+  },
+  ddSearch: {
+    backgroundColor: theme?.colors?.mainBackground,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme?.colors?.input,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 15,
+    color: theme?.colors?.text,
+    marginBottom: 8,
+  },
+  ddList: { flexGrow: 0 },
+  ddRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme?.colors?.input,
+  },
+  ddRowTxt: { fontSize: 15, color: theme?.colors?.text, flex: 1 },
+  ddRowTxtOn: { color: theme?.colors?.primary, fontWeight: "700" },
+
+  // Measurement
+  measureRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  measureInput: {
+    backgroundColor: theme?.colors?.cardBackground,
+    borderRadius: theme?.layout?.borderRadius?.s ?? 8,
+    borderWidth: 1,
+    borderColor: theme?.colors?.input,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 15,
+    color: theme?.colors?.text,
+    minHeight: 42,
+    minWidth: 120,
+    flexShrink: 0,
+  },
+  measureUnit: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: theme?.colors?.textSubtle,
+  },
 
   thumbRow: { flexDirection: "row", gap: 10, paddingVertical: 2 },
   thumbContainer: { width: THUMB, height: THUMB },

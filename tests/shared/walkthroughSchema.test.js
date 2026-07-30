@@ -17,7 +17,7 @@ describe("walkthroughSchema — contract constants", () => {
     expect(SECTION_KINDS).toEqual(["static", "repeatable"]);
   });
 
-  it("declares the seven field types with hasAnswer flags", () => {
+  it("declares the field types with hasAnswer flags", () => {
     expect(Object.keys(FIELD_TYPES)).toEqual([
       "heading",
       "text",
@@ -26,10 +26,23 @@ describe("walkthroughSchema — contract constants", () => {
       "checkbox",
       "photo",
       "severity",
+      "dropdown",
+      "measurement",
+      "date",
     ]);
     // Only headings are display-only.
     expect(FIELD_TYPES.heading.hasAnswer).toBe(false);
-    for (const t of ["text", "toggle", "radio", "checkbox", "photo", "severity"]) {
+    for (const t of [
+      "text",
+      "toggle",
+      "radio",
+      "checkbox",
+      "photo",
+      "severity",
+      "dropdown",
+      "measurement",
+      "date",
+    ]) {
       expect(FIELD_TYPES[t].hasAnswer).toBe(true);
       expect(typeof FIELD_TYPES[t].label).toBe("string");
     }

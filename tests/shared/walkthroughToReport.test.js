@@ -80,6 +80,30 @@ describe("walkthroughFieldBindings", () => {
     expect(walkthroughFieldBindings(null)).toEqual([]);
     expect(walkthroughFieldBindings({ sections: [] })).toEqual([]);
   });
+
+  it("maps dropdown/measurement/date to text bindings (not image), carrying fieldType", () => {
+    const schema = {
+      version: 1,
+      sections: [
+        {
+          id: "s",
+          kind: "static",
+          title: "New types",
+          fields: [
+            { id: "f_dd", type: "dropdown", label: "Pick", config: { options: [{ id: "o1", label: "A" }] } },
+            { id: "f_m", type: "measurement", label: "Temp", config: { unit: "°F" } },
+            { id: "f_d", type: "date", label: "Serviced", config: {} },
+          ],
+        },
+      ],
+    };
+    const byKey = Object.fromEntries(walkthroughFieldBindings(schema).map((b) => [b.key, b]));
+    expect(byKey["wt.f_dd"]).toMatchObject({ fieldType: "dropdown", type: "text" });
+    expect(byKey["wt.f_m"]).toMatchObject({ fieldType: "measurement", type: "text" });
+    expect(byKey["wt.f_d"]).toMatchObject({ fieldType: "date", type: "text" });
+    // dropdown keeps its options for the report editor palette.
+    expect(byKey["wt.f_dd"].options).toEqual([{ id: "o1", label: "A" }]);
+  });
 });
 
 describe("walkthroughBindingByKey", () => {

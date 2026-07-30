@@ -91,6 +91,41 @@ function FieldPreview({ field }) {
         </div>
       );
 
+    case "dropdown": {
+      const opts = config.options ?? [];
+      return (
+        <div className="wt-fp">
+          <div className="wt-fp-label">{label}</div>
+          <div className="wt-fp-select">
+            <span>{opts[0]?.label || "Choose…"}</span>
+            <span className="wt-fp-caret">▾</span>
+          </div>
+        </div>
+      );
+    }
+
+    case "measurement":
+      return (
+        <div className="wt-fp">
+          <div className="wt-fp-label">{label}</div>
+          <div className="wt-fp-measure">
+            <span className="wt-fp-measure-box">0</span>
+            {config.unit ? <span className="wt-fp-unit">{config.unit}</span> : null}
+          </div>
+        </div>
+      );
+
+    case "date":
+      return (
+        <div className="wt-fp">
+          <div className="wt-fp-label">{label}</div>
+          <div className="wt-fp-select">
+            <span className="wt-fp-placeholder">mm / dd / yyyy</span>
+            <span className="wt-fp-caret">◷</span>
+          </div>
+        </div>
+      );
+
     default:
       return <div className="wt-fp-label">{label}</div>;
   }

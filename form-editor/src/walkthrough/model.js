@@ -32,6 +32,12 @@ const FIELD_DEFAULTS = {
   }),
   photo: () => ({ label: "Photos", config: { notes: true } }),
   severity: () => ({ label: "Severity", config: {} }),
+  dropdown: () => ({
+    label: "Choose one:",
+    config: { options: [makeOption("Option 1"), makeOption("Option 2")] },
+  }),
+  measurement: () => ({ label: "Measurement", config: { unit: "" } }),
+  date: () => ({ label: "Date", config: {} }),
 };
 
 export function makeField(type) {
@@ -83,6 +89,9 @@ export const PALETTE_FIELDS = [
   { type: "checkbox", glyph: "☑" },
   { type: "photo", glyph: "▣" },
   { type: "severity", glyph: "▲" },
+  { type: "dropdown", glyph: "▾" },
+  { type: "measurement", glyph: "#" },
+  { type: "date", glyph: "◷" },
 ].map((f) => ({ ...f, label: FIELD_TYPES[f.type]?.label ?? f.type }));
 
 // DnD payload MIME types — distinguish "drop a brand-new field type" from

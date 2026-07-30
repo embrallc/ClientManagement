@@ -37,12 +37,23 @@ describe("makeField", () => {
     expect(makeField("severity").label).toBe("Severity");
   });
 
-  it("seeds radio/checkbox with two options that carry ids", () => {
+  it("seeds radio/checkbox/dropdown with two options that carry ids", () => {
     const radio = makeField("radio");
     expect(radio.config.options).toHaveLength(2);
     expect(radio.config.options.map((o) => o.label)).toEqual(["Option 1", "Option 2"]);
     for (const o of radio.config.options) expect(o.id).toMatch(/^o_/);
     expect(makeField("checkbox").config.options).toHaveLength(2);
+    const dropdown = makeField("dropdown");
+    expect(dropdown.config.options).toHaveLength(2);
+    for (const o of dropdown.config.options) expect(o.id).toMatch(/^o_/);
+  });
+
+  it("seeds measurement with an empty unit and date with an empty config", () => {
+    expect(makeField("measurement")).toMatchObject({
+      type: "measurement",
+      config: { unit: "" },
+    });
+    expect(makeField("date")).toMatchObject({ type: "date", config: {} });
   });
 
   it("falls back to a generic field for an unknown type", () => {
@@ -99,7 +110,7 @@ describe("emptyTemplate", () => {
 });
 
 describe("PALETTE_FIELDS + DnD mime keys", () => {
-  it("lists the seven field types with glyph + label", () => {
+  it("lists the field types with glyph + label", () => {
     expect(PALETTE_FIELDS.map((f) => f.type)).toEqual([
       "heading",
       "text",
@@ -108,6 +119,9 @@ describe("PALETTE_FIELDS + DnD mime keys", () => {
       "checkbox",
       "photo",
       "severity",
+      "dropdown",
+      "measurement",
+      "date",
     ]);
     for (const f of PALETTE_FIELDS) {
       expect(typeof f.glyph).toBe("string");

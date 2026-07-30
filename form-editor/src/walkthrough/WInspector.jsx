@@ -2,7 +2,18 @@ import { FIELD_TYPES, TEXT_VARIANTS } from "./model";
 import { useWalkthroughStore } from "./store";
 
 const VARIANT_LABELS = { line: "Underline", box: "Box", multiline: "Text area" };
-const REQUIREABLE = new Set(["text", "toggle", "radio", "checkbox", "photo", "severity"]);
+const REQUIREABLE = new Set([
+  "text",
+  "toggle",
+  "radio",
+  "checkbox",
+  "photo",
+  "severity",
+  "dropdown",
+  "measurement",
+  "date",
+]);
+const UNIT_PRESETS = ["ft", "in", "°F", "PSI", "V", "A"];
 
 export default function WInspector() {
   const selected = useWalkthroughStore((s) => s.selected);
@@ -132,7 +143,8 @@ export default function WInspector() {
   const sid = section.id;
   const fid = field.id;
   const cfg = field.config ?? {};
-  const isChoice = field.type === "radio" || field.type === "checkbox";
+  const isChoice =
+    field.type === "radio" || field.type === "checkbox" || field.type === "dropdown";
 
   return (
     <div className="inspector">
@@ -189,6 +201,45 @@ export default function WInspector() {
             onChange={(e) => updateFieldConfig(sid, fid, { notes: e.target.checked })}
           />
         </div>
+      )}
+
+      {/* measurement unit */}
+      {field.type === "measurement" && (
+        <>
+          <div style={{ height: 10 }} />
+          <label>Unit</label>
+          <input
+            type="text"
+            className="grow"
+            value={cfg.unit ?? ""}
+            placeholder="e.g. ft, in, °F, PSI, V, A"
+            onChange={(e) => updateFieldConfig(sid, fid, { unit: e.target.value })}
+          />
+          <div className="wt-unit-chips" style={{ marginTop: 6 }}>
+            {UNIT_PRESETS.map((u) => (
+              <button
+                key={u}
+                type="button"
+                className={cfg.unit === u ? "active" : ""}
+                onClick={() => updateFieldConfig(sid, fid, { unit: u })}
+              >
+                {u}
+              </button>
+            ))}
+          </div>
+          <p className="muted" style={{ marginTop: 6 }}>
+            Inspectors type a number; the unit shows next to it and prints on the
+            report.
+          </p>
+        </>
+      )}
+
+      {/* date note */}
+      {field.type === "date" && (
+        <p className="muted" style={{ marginTop: 10 }}>
+          Inspectors pick a date from a calendar; it prints on the report in a
+          readable format.
+        </p>
       )}
 
       {/* severity note */}

@@ -208,6 +208,18 @@ select.zoom {
 .palette-item.wide {
   grid-column: span 2;
 }
+/* Two-line section-chooser button: bold label + a quiet helper sub-line. */
+.palette-item .pi-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.palette-item .pi-sub {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-fine);
+  line-height: 1.35;
+}
 .palette-item.band-static {
   border-left: 3px solid var(--text-fine);
 }

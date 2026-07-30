@@ -33,9 +33,9 @@ export default function WInspector() {
         </p>
         <hr />
         <p className="muted">
-          <b>Static</b> sections appear once per inspection. <b>Repeating</b>{" "}
-          sections can be added as many times as the inspector needs (one per
-          area of the home).
+          <b>Fixed</b> sections are filled out once per inspection — the same
+          questions every time. <b>Add-as-Needed</b> sections let the inspector
+          add as many entries as they need (one per item they find).
         </p>
       </div>
     );
@@ -70,15 +70,20 @@ export default function WInspector() {
             className={section.kind === "static" ? "active" : ""}
             onClick={() => setSectionKind(section.id, "static")}
           >
-            Static
+            Fixed
           </button>
           <button
             className={section.kind === "repeatable" ? "active" : ""}
             onClick={() => setSectionKind(section.id, "repeatable")}
           >
-            Repeating
+            Add as Needed
           </button>
         </div>
+        <p className="muted" style={{ marginTop: 6 }}>
+          {section.kind === "repeatable"
+            ? "Inspectors add as many entries as they need — one per item they find (e.g. one per roof issue)."
+            : "The same questions every inspection, filled out once (e.g. appliances, carpet, bathrooms)."}
+        </p>
 
         {section.kind === "repeatable" && (
           <>

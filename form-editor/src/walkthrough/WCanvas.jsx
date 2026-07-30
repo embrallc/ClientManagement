@@ -280,10 +280,10 @@ export default function WCanvas() {
           </div>
           <div className="wt-blank-actions" onClick={(e) => e.stopPropagation()}>
             <button className="btn" onClick={() => addSection("static")}>
-              ▬ Static Section
+              ▬ Fixed
             </button>
             <button className="btn primary" onClick={() => addSection("repeatable")}>
-              ⧉ Repeating Section
+              ⧉ Add as Needed
             </button>
           </div>
         </div>

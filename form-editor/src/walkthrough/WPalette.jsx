@@ -30,16 +30,24 @@ export default function WPalette() {
         <button
           className="palette-item wide band-static"
           onClick={() => addSection("static")}
-          title="A section that appears once"
+          title="A fixed set of questions, filled out once (e.g. always check appliances, carpet, bathrooms)."
         >
-          <span className="glyph">▬</span> Static Section
+          <span className="glyph">▬</span>
+          <span className="pi-text">
+            Fixed
+            <span className="pi-sub">Same questions every time — filled out once.</span>
+          </span>
         </button>
         <button
           className="palette-item wide band-repeat"
           onClick={() => addSection("repeatable")}
-          title="A section the inspector can add multiple times (per area)"
+          title="Inspectors add as many entries as they need — one per item they find (e.g. one per roof issue)."
         >
-          <span className="glyph">⧉</span> Repeating Section
+          <span className="glyph">⧉</span>
+          <span className="pi-text">
+            Add as Needed
+            <span className="pi-sub">Inspector adds one entry per item they find.</span>
+          </span>
         </button>
       </div>
 
@@ -67,8 +75,8 @@ export default function WPalette() {
 
       <h3>Tips</h3>
       <p className="hint">
-        <b>Repeating sections</b> get stamped out once per area the inspector
-        walks — design it once, it repeats automatically in the report.
+        <b>Add-as-Needed sections</b> get stamped out once per item the
+        inspector logs — design it once, it repeats automatically in the report.
       </p>
       <p className="hint">
         The page in the middle is a live preview: it shows exactly what your

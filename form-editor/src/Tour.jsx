@@ -29,7 +29,7 @@ const STEPS = [
     placement: "right",
     title: "Two kinds of sections",
     body:
-      "Every form is built from sections. A Static section appears once per inspection — like a summary. A Repeating section is stamped out again for every area the inspector walks (Basement, Roof, Kitchen): design it once, it repeats itself.",
+      "Every form is built from sections. A Fixed section is filled out once per inspection — the same questions every time, like a summary. An Add-as-Needed section lets the inspector add as many entries as they need — one per item they find (a roof issue, a room, an appliance): design it once, it repeats automatically in the report.",
   },
   {
     mode: "walkthrough",

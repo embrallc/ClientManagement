@@ -79,6 +79,8 @@ describe("makeElement", () => {
     expect(makeElement("divider").style).toMatchObject({ thickness: 2 });
     expect(makeElement("photoGrid").style).toMatchObject({ cols: 3, gap: 12, captions: true });
     expect(makeElement("image").asset).toBeNull();
+    // Images default to full opacity + contain fit (render behind content).
+    expect(makeElement("image").style).toMatchObject({ opacity: 1, fit: "contain" });
   });
 
   it("throws on an unknown element type", () => {

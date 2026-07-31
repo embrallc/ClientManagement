@@ -468,7 +468,11 @@ function layoutBand(band, ctx, scope, fonts, embeddedById) {
     });
   }
 
-  return { items: [...shapeItems, ...items], heightPx: grownBandH };
+  // Images paint right after shapes (behind text/data), so a logo can sit as a
+  // header background without covering content. Mirrors the editor's layering.
+  const imageItems = items.filter((it) => it.kind === "imageEl");
+  const contentItems = items.filter((it) => it.kind !== "imageEl");
+  return { items: [...shapeItems, ...imageItems, ...contentItems], heightPx: grownBandH };
 }
 
 // ── Photo bytes → embed-ready (sharp downscale + EXIF rotate) ────────────────
@@ -909,16 +913,23 @@ export async function renderInspectionReport({
       if (!path || path.startsWith("data:")) continue;
       const asset = await getFormAsset(path);
       if (!asset) continue;
-      const scale = Math.min(wPt / asset.w, hPt / asset.h);
-      const drawW = asset.w * scale;
-      const drawH = asset.h * scale;
-      page.drawImage(asset.ref, {
-        x: xPt + (wPt - drawW) / 2,
-        y: yBottomPt + (hPt - drawH) / 2,
-        width: drawW,
-        height: drawH,
-        opacity: Number(item.data.style?.opacity ?? 1),
-      });
+      const opacity = Number(item.data.style?.opacity ?? 1);
+      if ((item.data.style?.fit ?? "contain") === "stretch") {
+        // Fill the frame exactly (may distort).
+        page.drawImage(asset.ref, { x: xPt, y: yBottomPt, width: wPt, height: hPt, opacity });
+      } else {
+        // Contain: scale to fit inside the frame, centered, aspect preserved.
+        const scale = Math.min(wPt / asset.w, hPt / asset.h);
+        const drawW = asset.w * scale;
+        const drawH = asset.h * scale;
+        page.drawImage(asset.ref, {
+          x: xPt + (wPt - drawW) / 2,
+          y: yBottomPt + (hPt - drawH) / 2,
+          width: drawW,
+          height: drawH,
+          opacity,
+        });
+      }
       continue;
     }
 

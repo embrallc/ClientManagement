@@ -385,8 +385,8 @@ function ImageUpload({ el, update }) {
       )}
       {el.asset?.w ? (
         <p className="muted">
-          {el.asset.w} × {el.asset.h}px — drawn to fit the frame without
-          stretching.
+          {el.asset.w} × {el.asset.h}px original — use the Fit control below to
+          decide how it fills the frame.
         </p>
       ) : (
         <p className="muted">
@@ -543,7 +543,38 @@ function ElementPanel({ band, el, update }) {
         </>
       )}
 
-      {el.type === "image" && <ImageUpload el={el} update={update} />}
+      {el.type === "image" && (
+        <>
+          <ImageUpload el={el} update={update} />
+          <div className="row">
+            <label>Fit</label>
+            <Seg
+              options={[
+                { value: "contain", label: "Fit" },
+                { value: "stretch", label: "Stretch" },
+              ]}
+              value={el.style?.fit ?? "contain"}
+              onChange={(fit) => update({ style: { fit } })}
+            />
+          </div>
+          <div className="row">
+            <label>Opacity</label>
+            <input
+              type="range"
+              min={0.1}
+              max={1}
+              step={0.05}
+              value={el.style?.opacity ?? 1}
+              onChange={(e) => update({ style: { opacity: parseFloat(e.target.value) } })}
+            />
+          </div>
+          <p className="muted">
+            Images sit behind text &amp; data, so a faded logo works as a header
+            background. <b>Fit</b> keeps the logo's proportions; <b>Stretch</b>{" "}
+            fills the frame exactly.
+          </p>
+        </>
+      )}
 
       {el.type === "divider" && (
         <>

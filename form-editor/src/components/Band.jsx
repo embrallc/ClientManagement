@@ -133,9 +133,19 @@ export default function Band({ band, index, total }) {
           ))}
         </div>
         <div className="layer" style={{ zIndex: 1 }}>
-          {band.elements.map((el) => (
-            <ElementView key={el.id} band={band} el={el} />
-          ))}
+          {/* Images render first so they sit BEHIND text/data (but above
+              shapes) — a logo never covers content, and works as a header
+              background. Mirrors the renderers' shapes→images→content order. */}
+          {band.elements
+            .filter((el) => el.type === "image")
+            .map((el) => (
+              <ElementView key={el.id} band={band} el={el} />
+            ))}
+          {band.elements
+            .filter((el) => el.type !== "image")
+            .map((el) => (
+              <ElementView key={el.id} band={band} el={el} />
+            ))}
         </div>
         {overlays.length > 0 && (
           <div className="layer sel-overlay" style={{ zIndex: 5 }}>

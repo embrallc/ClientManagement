@@ -117,12 +117,14 @@ export function makeElement(type, frame = {}, extra = {}) {
     case "image":
       // Fixed-size picture (logo, badge, signature). `asset` references an
       // org-scoped upload in the form-assets bucket — never inlined into the
-      // template JSON.
+      // template JSON. Renders BEHIND text/data (background layer), so a faded
+      // logo works as a header background. `fit`: "contain" (keep aspect, the
+      // default) | "stretch" (fill the frame exactly).
       return {
         ...base,
         frame: { x: 16, y: 16, w: 220, h: 110, ...frame },
         asset: extra.asset ?? null, // { path, w, h }
-        style: { opacity: 1, ...extra.style },
+        style: { opacity: 1, fit: "contain", ...extra.style },
       };
     default:
       throw new Error(`Unknown element type: ${type}`);

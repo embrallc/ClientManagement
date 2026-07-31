@@ -99,7 +99,7 @@ export default function ElementView({ band, el }) {
           style={{
             width: "100%",
             height: "100%",
-            objectFit: "contain",
+            objectFit: (el.style?.fit ?? "contain") === "stretch" ? "fill" : "contain",
             opacity: el.style?.opacity ?? 1,
             pointerEvents: "none",
           }}

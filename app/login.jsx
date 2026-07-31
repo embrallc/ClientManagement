@@ -502,6 +502,7 @@ const styles = StyleSheet.create({
     ...theme.typography.h3,
     color: theme.colors.text,
     marginBottom: theme.spacing.m,
+    textAlign: "center",
   },
 
   // Verification-pending card

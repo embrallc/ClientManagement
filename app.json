@@ -57,9 +57,26 @@
       "expo-sqlite",
       "expo-mail-composer",
       "@react-native-community/datetimepicker",
-      "expo-location",
-      "expo-image-picker",
-      "expo-camera",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Zanbi to use your location to show inspections on the map and plan routes between appointments."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Zanbi to access your photos so you can add existing pictures to an inspection.",
+          "cameraPermission": "Allow Zanbi to use your camera to take inspection photos."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Zanbi to use your camera to take inspection photos.",
+          "recordAudioAndroid": false
+        }
+      ],
       [
         "expo-media-library",
         {

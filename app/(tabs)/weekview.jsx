@@ -13,6 +13,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { updateInspection } from "../../db/inspections";
 import { logError } from "../../db/logs";
+import { pushInspection } from "../../utils/sync";
 import { useInspectionStore } from "../../stores/useInspectionStore";
 import { useSettingsStore } from "../../stores/useSettingsStore";
 import { findOverlappingInspection } from "../../utils/overlapUtils";
@@ -179,6 +180,12 @@ export default function WeekViewScreen() {
           ScheduledAt: newScheduledAt,
         });
         updateInStore({ ...insp, ...updated });
+        // Push the new time to the cloud immediately so the day-before SMS
+        // reminder can't fire on a stale time if the app is closed before the
+        // next foreground sync (the reminder cron reads the server row).
+        pushInspection(event.id).catch((e) =>
+          logError(e, `WeekView.handleDragEventEnd.push id=${event.id}`),
+        );
         await Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success,
         ).catch(() => {});

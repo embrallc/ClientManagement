@@ -32,6 +32,7 @@ export default function AutoDocSendScreen() {
   const orgSk = useSettingsStore((s) => s.orgSk);
   const userProfile = useSettingsStore((s) => s.userProfile);
   const setAutoSendInvoice = useSettingsStore((s) => s.setAutoSendInvoice);
+  const setAutoSendReport = useSettingsStore((s) => s.setAutoSendReport);
 
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -56,6 +57,7 @@ export default function AutoDocSendScreen() {
       // Mirror the invoice policy into the store so the completion flow (which
       // prompts for an amount when this is on) sees changes without a reboot.
       if (s) setAutoSendInvoice(!!s.auto_send_invoice);
+      if (s) setAutoSendReport(!!s.auto_send_report);
     } catch (e) {
       logError(e, "AutoDocSend.reload");
       setOffline(true);
@@ -63,7 +65,7 @@ export default function AutoDocSendScreen() {
     } finally {
       setLoading(false);
     }
-  }, [orgSk, setAutoSendInvoice]);
+  }, [orgSk, setAutoSendInvoice, setAutoSendReport]);
 
   useEffect(() => {
     reload();
@@ -75,12 +77,14 @@ export default function AutoDocSendScreen() {
     const prev = status;
     setStatus((s) => ({ ...s, [key]: val }));
     if (key === "auto_send_invoice") setAutoSendInvoice(val);
+    if (key === "auto_send_report") setAutoSendReport(val);
     try {
       await setOrgPaymentPolicy(orgSk, { [key]: val });
     } catch (e) {
       logError(e, `AutoDocSend.toggle ${key}`);
       setStatus(prev);
       if (key === "auto_send_invoice") setAutoSendInvoice(!!prev?.auto_send_invoice);
+      if (key === "auto_send_report") setAutoSendReport(!!prev?.auto_send_report);
       Alert.alert("Couldn't save", "That setting didn't save. Please try again.");
     }
   }

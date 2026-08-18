@@ -56,6 +56,10 @@ export const useSettingsStore = create((set, get) => ({
   // invoice yet prompts for the amount first. Same caching model as paymentsLive —
   // fetched at boot + refreshed when the owner toggles it in Automatic Document Send.
   autoSendInvoice: false,
+  // Cached org policy organizations.auto_send_report ("auto-send report on complete").
+  // Same caching model as autoSendInvoice; used to warn before an OFFLINE completion,
+  // since auto-send generates the report server-side (needs a connection).
+  autoSendReport: false,
   fname: null,
   lname: null,
   apptLengthMinutes: 60,
@@ -344,6 +348,10 @@ export const useSettingsStore = create((set, get) => ({
 
   setAutoSendInvoice: (val) => {
     set({ autoSendInvoice: !!val });
+  },
+
+  setAutoSendReport: (val) => {
+    set({ autoSendReport: !!val });
   },
 
   setFname: (val) => {

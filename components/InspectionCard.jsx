@@ -36,6 +36,7 @@ import { useInspectionStore } from "../stores/useInspectionStore";
 import { useMapStore } from "../stores/useMapStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { useSmsStore } from "../stores/useSmsStore";
+import { isOnline } from "../utils/connectivity";
 import { reconcileInspection } from "../utils/autoComms";
 import { deleteLocalReport, generateInspectionReport } from "../utils/reports";
 import { pushInspection, pushInspectionForm } from "../utils/sync";
@@ -309,6 +310,7 @@ export default function InspectionCard({ inspection, onPress }) {
   const userProfile = useSettingsStore((s) => s.userProfile);
   const paymentsLive = useSettingsStore((s) => s.paymentsLive);
   const autoSendInvoice = useSettingsStore((s) => s.autoSendInvoice);
+  const autoSendReport = useSettingsStore((s) => s.autoSendReport);
   // Once payments are live, every role sees the invoice action (unchanged flow).
   // Before setup, only owner/admin see it — and it opens the upsell, not the
   // amount sheet. Basic members don't see it at all until invoicing is live.
@@ -454,14 +456,36 @@ export default function InspectionCard({ inspection, onPress }) {
   // invoice already exists) completion runs immediately — unchanged.
   const handleComplete = useDebouncedPress(() => {
     swipeRef.current?.close();
-    const noInvoiceYet =
-      !inspection.PaymentState || inspection.PaymentState === "none";
-    if (autoSendInvoice && paymentsLive && noInvoiceYet) {
-      setCompleteGated(true);
-      setPayOpen(true);
-    } else {
-      runCompletion();
+
+    // The normal completion path (invoice-gate or run). Runs immediately when
+    // online, or after the user dismisses the offline warning below.
+    const proceed = () => {
+      const noInvoiceYet =
+        !inspection.PaymentState || inspection.PaymentState === "none";
+      if (autoSendInvoice && paymentsLive && noInvoiceYet) {
+        setCompleteGated(true);
+        setPayOpen(true);
+      } else {
+        runCompletion();
+      }
+    };
+
+    // Auto-send (report or invoice) generates the document on the server, which
+    // needs a connection. Completing offline pushes nothing, so the auto-sent
+    // report renders blank. Warn and let them wait for a stable connection.
+    if (!isOnline() && (autoSendReport || autoSendInvoice)) {
+      Alert.alert(
+        "Connection needed",
+        "Auto-send needs internet to generate the report. If you complete now the report may come out blank until you regenerate it. We recommend retrying once your connection is stable.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Complete anyway", onPress: proceed },
+        ],
+      );
+      return;
     }
+
+    proceed();
   });
 
   // Delete: confirm, then soft-delete (_deleted = 1). Restorable from

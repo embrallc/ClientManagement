@@ -1,7 +1,11 @@
 const path = require("path");
-const { getDefaultConfig } = require("expo/metro-config");
+const { getSentryExpoConfig } = require("@sentry/react-native/metro");
 
-const config = getDefaultConfig(__dirname);
+// Sentry's Metro config wraps Expo's default config and injects debug IDs so
+// uploaded source maps associate with events (readable stack traces). It returns
+// the same shape as getDefaultConfig, so the Skia resolver overrides below are
+// unaffected.
+const config = getSentryExpoConfig(__dirname);
 
 // @shopify/react-native-skia declares "react-native": "src/index.ts" in its
 // package.json, which Metro picks up over "main". The TypeScript source contains

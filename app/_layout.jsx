@@ -1,4 +1,5 @@
 import { theme } from "@theme";
+import * as Sentry from "@sentry/react-native";
 import * as Notifications from "expo-notifications";
 import { router, Stack, usePathname } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -49,6 +50,17 @@ configureReanimatedLogger({ level: ReanimatedLogLevel.warn, strict: false });
 // before the component mounts) so any boot-time failure is printed + logged.
 setupGlobalErrorHandler();
 
+// Crash / error monitoring (Sentry). Init at module load, before the component
+// mounts, so boot-time failures are captured. Disabled in dev so local churn
+// doesn't burn the free-tier quota. The DSN is public/write-only, so it's safe
+// in the bundle; source maps upload at build time via the @sentry/react-native
+// config plugin (needs SENTRY_AUTH_TOKEN in the EAS build env).
+Sentry.init({
+  dsn: "https://870e000d5e7fba5a052ab7a76ec144e4@o4511928937938944.ingest.us.sentry.io/4511928977326081",
+  enabled: !__DEV__,
+  tracesSampleRate: 0.1,
+});
+
 import { isLocked, useSubscriptionStore } from "../stores/useSubscriptionStore";
 import {
   addCustomerInfoListener,
@@ -57,7 +69,7 @@ import {
   logInPurchases,
 } from "../utils/purchases";
 
-export default function RootLayout() {
+function RootLayout() {
   const [ready, setReady] = useState(false);
   const [isAuthed, setIsAuthed] = useState(false);
   const pathname = usePathname();
@@ -71,6 +83,7 @@ export default function RootLayout() {
   const setOrgSk = useSettingsStore((s) => s.setOrgSk);
   const setPaymentsLive = useSettingsStore((s) => s.setPaymentsLive);
   const setAutoSendInvoice = useSettingsStore((s) => s.setAutoSendInvoice);
+  const setAutoSendReport = useSettingsStore((s) => s.setAutoSendReport);
   const setFname = useSettingsStore((s) => s.setFname);
   const setLname = useSettingsStore((s) => s.setLname);
   const loadSmsTemplates = useSmsStore((s) => s.load);
@@ -120,6 +133,7 @@ export default function RootLayout() {
         .then((s) => {
           setPaymentsLive(!!s?.stripe_charges_enabled);
           setAutoSendInvoice(!!s?.auto_send_invoice);
+          setAutoSendReport(!!s?.auto_send_report);
         })
         .catch((e) => logError(e, "RootLayout.loadUserData.paymentStatus"));
     }
@@ -291,6 +305,13 @@ export default function RootLayout() {
         s.refreshCancelledCount?.();
         s.bumpCancelBadgePulse?.();
         s.refreshProductNotifs?.();
+      } else if (state === "background") {
+        // Flush any local edits (reschedule, save, cancel, restore) that haven't
+        // been pushed yet. Without this, a change made right before the app is
+        // closed sits in SQLite until the next foreground, and the server-side
+        // appt-reminder cron would text a stale time. syncAll() is guarded
+        // (syncInFlight) so this can't overlap another run.
+        syncAll().catch((e) => logError(e, "RootLayout.backgroundSync"));
       }
     });
     return () => {
@@ -514,3 +535,6 @@ export default function RootLayout() {
     </AppErrorBoundary>
   );
 }
+
+// Wrap the root so Sentry captures render errors and attaches navigation context.
+export default Sentry.wrap(RootLayout);

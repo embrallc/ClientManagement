@@ -7,11 +7,13 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "channel": "development",
       "env": { "EXPO_PUBLIC_ENV": "development" }
     },
     "preview": {
       "distribution": "internal",
       "environment": "preview",
+      "channel": "preview",
       "env": { "EXPO_PUBLIC_ENV": "preview" }
     },
     "preview-testflight": {
@@ -22,6 +24,7 @@
     "production": {
       "autoIncrement": true,
       "environment": "production",
+      "channel": "production",
       "env": { "EXPO_PUBLIC_ENV": "production" }
     }
   },

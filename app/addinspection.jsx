@@ -25,6 +25,7 @@ import AddressAutocomplete from "../components/AddressAutocomplete";
 import KeyboardToolbar from "../components/KeyboardToolbar";
 import { insertInspection, updateInspection } from "../db/inspections";
 import { logError } from "../db/logs";
+import { pushInspection } from "../utils/sync";
 import { NOTIFICATION_NAMES } from "../db/notificationSettings";
 import { showBanner } from "../stores/useBannerStore";
 import { useInspectionStore } from "../stores/useInspectionStore";
@@ -355,9 +356,18 @@ export default function AddInspectionScreen() {
       if (isEditing) {
         const updated = await updateInspection(inspectionSk, data);
         updateInStore({ ...existing, ...updated });
+        // Push immediately so the change reaches the cloud even if the app is
+        // closed before the next foreground sync (the appt-reminder cron reads
+        // the server row — a not-yet-synced edit would text a stale time).
+        pushInspection(inspectionSk).catch((e) =>
+          logError(e, `AddInspectionScreen.handleSave.push sk=${inspectionSk}`),
+        );
       } else {
         const created = await insertInspection({ ...data, UserSk: userSk });
         addToStore(created);
+        pushInspection(created.InspectionSk).catch((e) =>
+          logError(e, `AddInspectionScreen.handleSave.push sk=${created.InspectionSk}`),
+        );
         // First-inspection onboarding prompt for local reminders. No-op
         // after the first time it runs (AsyncStorage flag inside the helper).
         await maybePromptForUpcomingApptNotif({ userSk });

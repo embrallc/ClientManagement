@@ -8,6 +8,12 @@
     "scheme": "clientmanagment",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "updates": {
+      "url": "https://u.expo.dev/984033e9-55d5-48cd-bf36-c1737cbe275f"
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
@@ -98,6 +104,13 @@
         "expo-calendar",
         {
           "calendarPermission": "Allow Zanbi to view your calendars and add your scheduled inspections to your calendar."
+        }
+      ],
+      [
+        "@sentry/react-native",
+        {
+          "organization": "embra-llc",
+          "project": "react-native"
         }
       ]
     ],

@@ -21,7 +21,9 @@
     "editor:deploy": "npm run editor:build && npx wrangler pages deploy form-editor/dist --project-name=kensa-form-editor",
     "editor:deploy:staging": "npm run editor:build:staging && npx wrangler pages deploy form-editor/dist --project-name=kensa-form-editor-staging",
     "editor:deploy-api": "npx supabase functions deploy form-editor",
-    "site:deploy": "npx wrangler pages deploy public --project-name=zanbi-site --branch=main --commit-dirty=true"
+    "site:deploy": "npx wrangler pages deploy public --project-name=zanbi-site --branch=main --commit-dirty=true",
+    "ota:prod": "eas update --branch production --environment production --platform ios",
+    "ota:preview": "eas update --branch preview --environment preview --platform ios"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

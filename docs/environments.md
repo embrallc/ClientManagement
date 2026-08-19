@@ -7,7 +7,7 @@ live where, and the exact steps to set up and operate each environment.
 
 | Env | Supabase | App build | Worker | form-editor | Third-party |
 |-----|----------|-----------|--------|-------------|-------------|
-| **local** | CLI/Docker (`supabase start`) on your machine | `expo start` + `.env.local` | optional local node | `vite dev` (mock mode) | test/sandbox |
+| **local** | CLI/Docker (`supabase start`) on your machine | `expo start` + `.env.development.local` | optional local node | `vite dev` (mock mode) | test/sandbox |
 | **staging** | `zuba-staging` project (same org) | EAS `preview` build | Railway service (staging) | Cloudflare Pages (staging) | Stripe **test** / RC sandbox |
 | **production** | current project `wwspvjsnkkgdziixbeei` (same org) | EAS `production` build | Railway service (prod, existing) | Cloudflare Pages (prod) | Stripe **live** / RC production |
 
@@ -66,7 +66,10 @@ npm run sb:reset            # applies all migrations, then supabase/seed.sql
 cp supabase/functions/.env.example supabase/functions/.env   # then fill test keys
 npm run sb:serve
 
-# 4. Point the app at local. Copy .env.example → .env.local and set:
+# 4. Point the app at local. Copy .env.example → .env.development.local and set:
+#    (Filename must be .env.development.local, NOT .env.local — Expo loads it ONLY
+#     in dev mode (`expo start`); it is skipped by `eas update`/`expo export`
+#     (production mode), so local/staging values can never leak into a prod OTA.)
 #    EXPO_PUBLIC_SUPABASE_URL = http://<your-LAN-IP>:54321   (LAN IP, not localhost,
 #                                                             so a physical device can reach it)
 #    EXPO_PUBLIC_SUPABASE_KEY = <anon key from sb:start output>
@@ -148,10 +151,10 @@ PUBLIC (safe in app bundle / committed config) — never the service-role key:
 
 | Var | Where it lives |
 |-----|----------------|
-| `EXPO_PUBLIC_SUPABASE_URL` | EAS env (preview/production), `.env.local` (local) |
-| `EXPO_PUBLIC_SUPABASE_KEY` (anon/publishable) | EAS env, `.env.local` |
-| `EXPO_PUBLIC_REPORT_WORKER_URL` | EAS env, `.env.local` |
-| `EXPO_PUBLIC_GOOGLE_PLACES_KEY` | EAS env, `.env.local` — **application-restricted** client key (iOS bundle ids + Places API New only); ships in the bundle but the value is never committed |
+| `EXPO_PUBLIC_SUPABASE_URL` | EAS env (preview/production), `.env.development.local` (local) |
+| `EXPO_PUBLIC_SUPABASE_KEY` (anon/publishable) | EAS env, `.env.development.local` |
+| `EXPO_PUBLIC_REPORT_WORKER_URL` | EAS env, `.env.development.local` |
+| `EXPO_PUBLIC_GOOGLE_PLACES_KEY` | EAS env, `.env.development.local` — **application-restricted** client key (iOS bundle ids + Places API New only); ships in the bundle but the value is never committed |
 | `EXPO_PUBLIC_SITE_URL` | EAS env (preview = Pages URL, production = `https://getzanbi.com`) — builds the email-confirm redirect `<site>/confirmed`. Must also be in Supabase → Auth → URL Configuration → Redirect URLs. Unset → falls back to the project Site URL |
 | `VITE_API_BASE` (form-editor) | `form-editor/.env.production` / `.env.staging` (committed; public URL) |
 

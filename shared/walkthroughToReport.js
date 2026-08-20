@@ -25,6 +25,7 @@ export const BAND_W = PAGE.widthPx - PAGE.marginPx * 2; // 720
 const BRAND = "#5C5CE8";
 const INK = "#111827";
 const MUTED = "#6B7280";
+const BLACK = "#000000";
 
 const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID
@@ -93,7 +94,7 @@ function fieldEl(x, y, w, h, binding, label, style = {}) {
     frame: { x, y, w, h },
     binding,
     label,
-    style: { fontSize: 13, color: INK, align: "left", bold: false, variant: "plain", ...style },
+    style: { fontSize: 12, color: BLACK, align: "left", bold: false, variant: "plain", ...style },
   };
 }
 
@@ -120,7 +121,7 @@ function band(kind, name, minHeightPx, repeat = null) {
   return { id: uid(), kind, name, repeat, minHeightPx, shapes: [], elements: [] };
 }
 
-const OVERLINE = { fontSize: 10, color: MUTED, align: "left" };
+const OVERLINE = { fontSize: 12, color: BLACK, align: "left" };
 
 // Stack one section's fields vertically into a band, flowing y downward.
 // Returns the y cursor after the last field.
@@ -128,24 +129,24 @@ function layoutFields(b, fields, startY) {
   let y = startY;
   for (const f of fields ?? []) {
     if (f.type === "heading") {
-      b.elements.push(textEl(0, y, BAND_W, 22, f.label, { fontSize: 13, color: INK }, true));
+      b.elements.push(textEl(0, y, BAND_W, 22, f.label, { fontSize: 12, color: BLACK }, true));
       y += 30;
       continue;
     }
     if (f.type === "photo") {
-      b.elements.push(textEl(0, y, BAND_W, 14, (f.label || "Photos").toUpperCase(), OVERLINE, true));
+      b.elements.push(textEl(0, y, BAND_W, 16, (f.label || "Photos"), OVERLINE, true));
       y += 17;
       b.elements.push(photoGridEl(0, y, BAND_W, 190, `wt.${f.id}`));
       y += 202;
       continue;
     }
     // label + value
-    b.elements.push(textEl(0, y, BAND_W, 14, (f.label || "").toUpperCase(), OVERLINE, true));
+    b.elements.push(textEl(0, y, BAND_W, 16, (f.label || ""), OVERLINE, true));
     y += 17;
     const multiline = f.type === "text" && (f.config?.variant ?? "line") === "multiline";
     const h = multiline ? 52 : 24;
     const variant = multiline || f.type === "severity" ? "box" : "plain";
-    const fontSize = f.type === "severity" ? 12 : 14;
+    const fontSize = 12;
     const align = f.type === "severity" ? "center" : "left";
     b.elements.push(
       fieldEl(0, y, multiline ? BAND_W : Math.min(BAND_W, 520), h, `wt.${f.id}`, f.label, {
@@ -197,11 +198,11 @@ export function walkthroughToReport(schema) {
   const cp = band("static", "Client & Property", 120);
   cp.elements.push(
     textEl(0, 2, 200, 16, "CLIENT", OVERLINE, true),
-    fieldEl(0, 24, 330, 24, "inspection.fullName", "Customer Name", { fontSize: 15 }),
+    fieldEl(0, 24, 330, 24, "inspection.fullName", "Customer Name", { fontSize: 12 }),
     fieldEl(0, 60, 158, 22, "inspection.phone", "Customer Phone", { fontSize: 12 }),
     fieldEl(176, 60, 154, 22, "inspection.email", "Customer Email", { fontSize: 12 }),
     textEl(380, 2, 200, 16, "PROPERTY", OVERLINE, true),
-    fieldEl(380, 24, 340, 24, "inspection.addressLine1", "Address Line 1", { fontSize: 15 }),
+    fieldEl(380, 24, 340, 24, "inspection.addressLine1", "Address Line 1", { fontSize: 12 }),
     fieldEl(380, 60, 150, 22, "inspection.city", "City", { fontSize: 12 }),
     fieldEl(542, 60, 60, 22, "inspection.state", "State", { fontSize: 12 }),
     fieldEl(614, 60, 106, 22, "inspection.zipCode", "Zip Code", { fontSize: 12 }),

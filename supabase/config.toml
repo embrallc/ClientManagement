@@ -445,6 +445,11 @@ verify_jwt = true
 [functions.my-day-route]
 verify_jwt = true
 
+[functions.notify-feedback]
+# Fired server-to-server by the feedback AFTER-INSERT trigger (pg_net) with a
+# service-role bearer the gateway validates; keep JWT verification on.
+verify_jwt = true
+
 [functions.reassign-inspection]
 verify_jwt = true
 

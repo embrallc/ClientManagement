@@ -13,9 +13,11 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import ContactActions from "../components/ContactActions";
+import RequestPaymentSheet from "../components/RequestPaymentSheet";
 import { getInspectionById } from "../db/inspections";
 import { listPayments } from "../db/payments";
-import { shareCheckoutLink } from "../utils/payments";
+import { collectInvoiceRecipients } from "../utils/recipients";
 
 const STATUS_META = {
   paid: { label: "Paid", color: theme.colors.success, icon: "check-circle" },
@@ -37,16 +39,24 @@ export default function PaymentsScreen() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Row being resent: opens RequestPaymentSheet directly on its existing link.
+  const [resendFor, setResendFor] = useState(null);
 
   const load = useCallback(async () => {
     const payments = await listPayments({ limit: 200 });
-    // Resolve a display label per row from the local inspection mirror.
+    // Resolve a display label + the local inspection mirror per row: the row's
+    // contact actions and the resend sheet's Email recipients both read from it.
     const withLabels = await Promise.all(
       payments.map(async (p) => {
         const insp = await getInspectionById(p.inspection_sk);
         const name = insp?.FullName || "";
         const addr = [insp?.AddressLine1, insp?.City].filter(Boolean).join(", ");
-        return { ...p, _label: name || addr || "Inspection", _sub: name ? addr : "" };
+        return {
+          ...p,
+          _label: name || addr || "Inspection",
+          _sub: name ? addr : "",
+          _insp: insp ?? null,
+        };
       }),
     );
     setRows(withLabels);
@@ -93,18 +103,29 @@ export default function PaymentsScreen() {
           </Text>
         </View>
 
+        {item._insp && (
+          <ContactActions inspection={item._insp} style={styles.contactRow} />
+        )}
+
         {canShare && (
           <TouchableOpacity
             style={styles.shareBtn}
             activeOpacity={0.8}
-            onPress={() => shareCheckoutLink(item.checkout_url, item._label)}
+            onPress={() =>
+              setResendFor({
+                sk: item.inspection_sk,
+                name: item._label,
+                link: item.checkout_url,
+                recipients: item._insp ? collectInvoiceRecipients(item._insp) : [],
+              })
+            }
           >
             <MaterialCommunityIcons
               name="share-variant"
               size={16}
               color={theme.colors.primary}
             />
-            <Text style={styles.shareTxt}>Share link again</Text>
+            <Text style={styles.shareTxt}>Resend link</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -158,6 +179,17 @@ export default function PaymentsScreen() {
           }
         />
       )}
+
+      {resendFor && (
+        <RequestPaymentSheet
+          visible
+          existingLink={resendFor.link}
+          inspectionSk={resendFor.sk}
+          clientName={resendFor.name}
+          recipients={resendFor.recipients}
+          onClose={() => setResendFor(null)}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -192,6 +224,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginTop: theme.spacing.s,
+  },
+  contactRow: {
     marginTop: theme.spacing.s,
   },
   statusChip: { flexDirection: "row", alignItems: "center", gap: 4 },

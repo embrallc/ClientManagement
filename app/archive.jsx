@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import ContactActions from "../components/ContactActions";
 import PaymentsUpsellSheet from "../components/PaymentsUpsellSheet";
 import RequestPaymentSheet from "../components/RequestPaymentSheet";
 import {
@@ -224,6 +225,10 @@ export default function ArchiveScreen() {
             </View>
           ) : null}
         </View>
+
+        {/* Contact the client without reopening — same SMS/Call/Email actions as
+            the active card, available in every archived state. */}
+        <ContactActions inspection={item} style={styles.contactRow} />
 
         <View style={styles.actionRow}>
           {type === "completed" && (
@@ -470,6 +475,9 @@ const styles = StyleSheet.create({
     ...theme?.shadows?.light,
   },
   cardText: {},
+  contactRow: {
+    marginTop: theme?.spacing?.s,
+  },
   cardName: {
     ...theme?.typography?.bodyBold,
   },

@@ -53,13 +53,15 @@ export async function getDeletedInspections() {
 }
 
 // Completed (CLOSED) rows that aren't deleted, for the Archive → Completed
-// restore screen.
+// restore screen. Newest scheduled first (DESC) so the most recent completions —
+// the ones an inspector is most likely still finishing up (e.g. sending the
+// report) — sit at the top.
 export async function getCompletedInspections() {
   try {
     return await db.getAllAsync(
       `SELECT * FROM Inspections
        WHERE _deleted = 0 AND Status = 'CLOSED'
-       ORDER BY ScheduledAt ASC`,
+       ORDER BY ScheduledAt DESC`,
     );
   } catch (e) {
     logError(e, "db/inspections.getCompletedInspections");

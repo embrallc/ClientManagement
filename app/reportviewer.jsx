@@ -143,8 +143,10 @@ export default function ReportViewerScreen() {
         syncAll().catch(() => {});
         if (res?.held) {
           showBanner({
-            message: "Report held — the client hasn't paid yet.",
+            message:
+              "Report staged — it'll send automatically once payment is received.",
             kind: "warning",
+            duration: 6000,
           });
         } else {
           const n = res.recipientCount;

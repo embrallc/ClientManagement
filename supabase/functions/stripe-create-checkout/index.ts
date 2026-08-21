@@ -18,7 +18,7 @@ import {
   SupabaseClient,
 } from "npm:@supabase/supabase-js@2";
 import { getStripe } from "../_shared/stripe.ts";
-import { channelRecipients, sendEmail } from "../_shared/email.ts";
+import { buildInvoiceEmail, channelRecipients, sendEmail } from "../_shared/email.ts";
 
 declare const Deno: { env: { get(name: string): string | undefined } };
 
@@ -161,19 +161,13 @@ serve(async (req) => {
 
   async function autoEmailInvoice(checkoutUrl: string): Promise<boolean> {
     if (!autoSendInvoice || recipients.length === 0) return false;
-    const addr = [insp.address_line1, insp.city, insp.state].filter(Boolean).join(", ");
-    const who = insp.full_name || "there";
-    const subject = `Your invoice${addr ? ` — ${addr}` : ""}`;
-    const text =
-      `Hi ${who},\n\nYour inspector has sent you an invoice. View the amount and ` +
-      `pay securely here:\n${checkoutUrl}\n\nThank you!`;
-    const html =
-      `<div style="font-family:-apple-system,system-ui,Segoe UI,sans-serif;color:#1c1c1e;line-height:1.5">` +
-      `<p>Hi ${who},</p>` +
-      `<p>Your inspector has sent you an invoice${addr ? ` for <strong>${addr}</strong>` : ""}.</p>` +
-      `<p><a href="${checkoutUrl}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:8px">View &amp; pay invoice</a></p>` +
-      `<p style="color:#888;font-size:13px">Or paste this link into your browser:<br>${checkoutUrl}</p>` +
-      `</div>`;
+    const { subject, html, text } = buildInvoiceEmail({
+      fullName: insp.full_name,
+      addressLine1: insp.address_line1,
+      city: insp.city,
+      state: insp.state,
+      checkoutUrl,
+    });
     const r = await sendEmail({ to: recipients, subject, html, text });
     if (!r.ok) logError("invoice_email_failed", new Error(r.error), { inspectionSk });
     return r.ok;

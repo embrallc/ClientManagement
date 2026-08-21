@@ -15,20 +15,27 @@ import {
   View,
 } from "react-native";
 import { logError } from "../db/logs";
-import { requestPayment, shareCheckoutLink } from "../utils/payments";
+import {
+  emailInvoiceToClient,
+  requestPayment,
+  shareCheckoutLink,
+} from "../utils/payments";
 
 // Reusable "Request Payment" sheet: enter an amount → create (or reuse) a Stripe
 // Checkout link → success state with the link (selectable, long-press to copy)
 // and a Share button. Used from the active InspectionCard and the Archive.
 //
 // Props: visible, onClose(outcome), inspectionSk, clientName?, userProfile?,
-//        onSuccess?, gatedComplete?
+//        onSuccess?, gatedComplete?, recipients?
 //
 // gatedComplete: when true the sheet is gating an inspection's completion (opened
 // by "auto-send invoice on complete" because no invoice exists yet). It adds a
 // "Complete without invoice" escape, and onClose is called with an outcome —
 // 'invoiced' | 'cancelled' | 'skipped' — so the caller knows whether to finish
 // the completion. Non-gated callers pass onClose={() => ...} and ignore the arg.
+//
+// recipients: invoice-channel addresses (collectInvoiceRecipients) — the list the
+// "Email" action delivers the link to, shown in its confirmation.
 export default function RequestPaymentSheet({
   visible,
   onClose,
@@ -37,12 +44,17 @@ export default function RequestPaymentSheet({
   userProfile,
   onSuccess,
   gatedComplete = false,
+  recipients = [],
 }) {
   const [amountText, setAmountText] = useState("");
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState("input"); // "input" | "success"
   const [link, setLink] = useState(null);
   const [autoSent, setAutoSent] = useState(false);
+  const [emailing, setEmailing] = useState(false);
+  // Inline result of the Email action ({ kind:'success'|'error', text }). Inline
+  // rather than a TopBanner because the banner would sit BEHIND this native modal.
+  const [emailStatus, setEmailStatus] = useState(null);
 
   function reset() {
     setAmountText("");
@@ -50,6 +62,51 @@ export default function RequestPaymentSheet({
     setPhase("input");
     setLink(null);
     setAutoSent(false);
+    setEmailing(false);
+    setEmailStatus(null);
+  }
+
+  // Email the invoice link to the invoice-channel recipients via Resend (one
+  // email to all). Confirms the address list first (mirrors the report's Send).
+  function handleEmailInvoice() {
+    if (emailing) return;
+    if (!recipients || recipients.length === 0) {
+      setEmailStatus({
+        kind: "error",
+        text: "No invoice email addresses are set for this inspection.",
+      });
+      return;
+    }
+    Alert.alert(
+      "Email invoice",
+      `Email the invoice to:\n\n${recipients.join("\n")}`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Email", onPress: doEmailInvoice },
+      ],
+    );
+  }
+
+  async function doEmailInvoice() {
+    setEmailing(true);
+    setEmailStatus(null);
+    try {
+      const { recipientCount } = await emailInvoiceToClient(inspectionSk);
+      setEmailStatus({
+        kind: "success",
+        text: `Invoice emailed to ${recipientCount} recipient${
+          recipientCount === 1 ? "" : "s"
+        }.`,
+      });
+    } catch (e) {
+      logError(e, `RequestPaymentSheet.emailInvoice sk=${inspectionSk}`);
+      setEmailStatus({
+        kind: "error",
+        text: e?.presentable ? e.message : "Couldn't send the invoice.",
+      });
+    } finally {
+      setEmailing(false);
+    }
   }
 
   // Infer the outcome from the phase when the caller doesn't force one: reaching
@@ -201,6 +258,67 @@ export default function RequestPaymentSheet({
                   {link}
                 </Text>
               </View>
+
+              {/* Email — the recommended, cross-platform delivery (like the
+                  report's Send): straight to the client's invoice recipients via
+                  Resend, no device mail app. */}
+              <TouchableOpacity
+                style={[
+                  styles.btn,
+                  styles.confirm,
+                  styles.emailBtn,
+                  emailing && styles.btnDisabled,
+                ]}
+                onPress={handleEmailInvoice}
+                disabled={emailing}
+                activeOpacity={0.85}
+              >
+                {emailing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons
+                      name="email-outline"
+                      size={18}
+                      color="#fff"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.confirmTxt}>Email</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {emailStatus ? (
+                <View style={styles.emailStatusRow}>
+                  <MaterialCommunityIcons
+                    name={
+                      emailStatus.kind === "success"
+                        ? "check-circle"
+                        : "alert-circle-outline"
+                    }
+                    size={16}
+                    color={
+                      emailStatus.kind === "success"
+                        ? theme.colors.success
+                        : theme.colors.error
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.emailStatusTxt,
+                      {
+                        color:
+                          emailStatus.kind === "success"
+                            ? theme.colors.success
+                            : theme.colors.error,
+                      },
+                    ]}
+                  >
+                    {emailStatus.text}
+                  </Text>
+                </View>
+              ) : null}
+
               <View style={styles.buttons}>
                 <TouchableOpacity
                   style={[styles.btn, styles.cancel]}
@@ -318,4 +436,16 @@ const styles = StyleSheet.create({
   confirm: { backgroundColor: theme.colors.primary, ...theme.shadows.light },
   confirmTxt: { ...theme.typography.bodyBold, color: "#fff" },
   btnDisabled: { opacity: theme.layout.opacity.disabled },
+  emailBtn: { marginTop: theme.spacing.m },
+  emailStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: theme.spacing.s,
+  },
+  emailStatusTxt: {
+    ...theme.typography.label,
+    fontWeight: "600",
+    flex: 1,
+  },
 });

@@ -23,10 +23,16 @@ import {
 
 // Reusable "Request Payment" sheet: enter an amount → create (or reuse) a Stripe
 // Checkout link → success state with the link (selectable, long-press to copy)
-// and a Share button. Used from the active InspectionCard and the Archive.
+// and Email + Share actions. Used from the active InspectionCard, the Archive, and
+// (in resend mode) Settings → Payment Activity.
 //
 // Props: visible, onClose(outcome), inspectionSk, clientName?, userProfile?,
-//        onSuccess?, gatedComplete?, recipients?
+//        onSuccess?, gatedComplete?, recipients?, existingLink?
+//
+// existingLink: when set, the sheet opens directly in the success state showing
+// this already-created link (no amount entry, no new link minted) — the "resend"
+// path from Payment Activity. Email still routes to the invoice recipients via
+// Resend (which re-finds the open link server-side); long-press copies it.
 //
 // gatedComplete: when true the sheet is gating an inspection's completion (opened
 // by "auto-send invoice on complete" because no invoice exists yet). It adds a
@@ -45,11 +51,14 @@ export default function RequestPaymentSheet({
   onSuccess,
   gatedComplete = false,
   recipients = [],
+  existingLink = null,
 }) {
   const [amountText, setAmountText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [phase, setPhase] = useState("input"); // "input" | "success"
-  const [link, setLink] = useState(null);
+  // Resend mode (existingLink) mounts fresh per open, so lazy initial state jumps
+  // straight to the success view with no flash of the amount-entry phase.
+  const [phase, setPhase] = useState(existingLink ? "success" : "input"); // "input" | "success"
+  const [link, setLink] = useState(existingLink ?? null);
   const [autoSent, setAutoSent] = useState(false);
   const [emailing, setEmailing] = useState(false);
   // Inline result of the Email action ({ kind:'success'|'error', text }). Inline
@@ -159,6 +168,8 @@ export default function RequestPaymentSheet({
     }
   }
 
+  const isResend = !!existingLink;
+
   if (!visible) return null;
 
   return (
@@ -240,18 +251,24 @@ export default function RequestPaymentSheet({
             <>
               <View style={styles.successIconWrap}>
                 <MaterialCommunityIcons
-                  name="check-circle"
+                  name={isResend ? "link-variant" : "check-circle"}
                   size={48}
-                  color={theme.colors.success}
+                  color={isResend ? theme.colors.primary : theme.colors.success}
                 />
               </View>
               <Text style={styles.title}>
-                {autoSent ? "Invoice sent" : "Payment link ready"}
+                {isResend
+                  ? "Resend payment link"
+                  : autoSent
+                    ? "Invoice sent"
+                    : "Payment link ready"}
               </Text>
               <Text style={styles.hint}>
-                {autoSent
-                  ? "We emailed the payment link to your client. You can also share it below — it's saved under Settings → Payment Activity."
-                  : "Share it with your client, or long-press the link to copy. It's also saved under Settings → Payment Activity."}
+                {isResend
+                  ? "Email it to your client, or long-press the link to copy so you can text it."
+                  : autoSent
+                    ? "We emailed the payment link to your client. You can also share it below — it's saved under Settings → Payment Activity."
+                    : "Share it with your client, or long-press the link to copy. It's also saved under Settings → Payment Activity."}
               </Text>
               <View style={styles.linkBox}>
                 <Text selectable style={styles.linkText} numberOfLines={3}>

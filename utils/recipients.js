@@ -42,3 +42,20 @@ export function collectReportRecipients(inspection) {
     : [];
   return validEmails([...legacy, inspection.Email]);
 }
+
+// Every address that should receive the INVOICE, matching the server's auto-send
+// selection (channelRecipients(..., "invoice")). NEW object form → exactly the
+// `invoice` channel. Legacy/none → just the primary email (the payer). Null-safe.
+export function collectInvoiceRecipients(inspection) {
+  if (!inspection) return [];
+  let rr = null;
+  try {
+    rr = inspection.ReportRecipients ? JSON.parse(inspection.ReportRecipients) : null;
+  } catch (_) {
+    rr = null;
+  }
+  if (rr && typeof rr === "object" && !Array.isArray(rr)) {
+    return validEmails(rr.invoice);
+  }
+  return validEmails([inspection.Email]);
+}

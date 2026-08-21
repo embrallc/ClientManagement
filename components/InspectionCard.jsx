@@ -38,6 +38,7 @@ import { useSettingsStore } from "../stores/useSettingsStore";
 import { useSmsStore } from "../stores/useSmsStore";
 import { isOnline } from "../utils/connectivity";
 import { reconcileInspection } from "../utils/autoComms";
+import { collectInvoiceRecipients } from "../utils/recipients";
 import { deleteLocalReport, generateInspectionReport } from "../utils/reports";
 import { pushInspection, pushInspectionForm } from "../utils/sync";
 import PaymentsUpsellSheet from "./PaymentsUpsellSheet";
@@ -841,6 +842,7 @@ export default function InspectionCard({ inspection, onPress }) {
           inspectionSk={inspection.InspectionSk}
           clientName={inspection.FullName}
           userProfile={userProfile}
+          recipients={collectInvoiceRecipients(inspection)}
           onSuccess={() =>
             showBanner({
               message: `Payment link ready for ${clientLabel}.`,

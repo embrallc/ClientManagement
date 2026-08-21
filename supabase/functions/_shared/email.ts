@@ -58,6 +58,34 @@ export function channelRecipients(
   return validEmails([primaryEmail]);
 }
 
+// Invoice email body — the Stripe payment link delivered to the client. Shared
+// by the auto-send path (stripe-create-checkout's autoEmailInvoice) and the
+// manual "Email invoice" path (resend-invoice) so both stay byte-identical.
+export function buildInvoiceEmail(opts: {
+  fullName?: string | null;
+  addressLine1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  checkoutUrl: string;
+}): { subject: string; html: string; text: string } {
+  const who = opts.fullName || "there";
+  const addr = [opts.addressLine1, opts.city, opts.state]
+    .filter(Boolean)
+    .join(", ");
+  const subject = `Your invoice${addr ? ` — ${addr}` : ""}`;
+  const text =
+    `Hi ${who},\n\nYour inspector has sent you an invoice. View the amount and ` +
+    `pay securely here:\n${opts.checkoutUrl}\n\nThank you!`;
+  const html =
+    `<div style="font-family:-apple-system,system-ui,Segoe UI,sans-serif;color:#1c1c1e;line-height:1.5">` +
+    `<p>Hi ${who},</p>` +
+    `<p>Your inspector has sent you an invoice${addr ? ` for <strong>${addr}</strong>` : ""}.</p>` +
+    `<p><a href="${opts.checkoutUrl}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:8px">View &amp; pay invoice</a></p>` +
+    `<p style="color:#888;font-size:13px">Or paste this link into your browser:<br>${opts.checkoutUrl}</p>` +
+    `</div>`;
+  return { subject, html, text };
+}
+
 export async function sendEmail({
   to,
   subject,

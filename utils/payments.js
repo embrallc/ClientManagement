@@ -154,3 +154,61 @@ export async function shareCheckoutLink(checkoutUrl, clientName) {
     logError(e, "utils/payments.shareCheckoutLink");
   }
 }
+
+// Map the resend-invoice Edge Function's machine codes to presentable copy.
+function friendlyInvoiceError(code) {
+  switch (code) {
+    case "no_invoice":
+      return "Create the invoice link first, then email it.";
+    case "no_recipients":
+      return "No invoice email addresses are set for this inspection.";
+    case "email_failed":
+      return "The invoice email couldn't be sent. Please try again.";
+    case "forbidden":
+      return "You don't have access to send this invoice.";
+    default:
+      return "Couldn't send the invoice. Please try again.";
+  }
+}
+
+// Server-side send: email the inspection's most recent open payment link to the
+// invoice-channel recipients via Resend (the resend-invoice Edge Function) — ONE
+// email to everyone, cross-platform (no device mail app). Reuses the link made by
+// "Create Link" and does NOT change payment_state (the "Billed" badge is already
+// set at link creation). Throws with a presentable `message`; resolves
+// { recipientCount } on success. Mirrors utils/reports.emailReportToClient.
+export async function emailInvoiceToClient(inspectionSk) {
+  if (!inspectionSk) throw new Error("missing inspection");
+  if (!isOnline()) {
+    const err = new Error("You're offline — sending the invoice needs a connection.");
+    err.presentable = true;
+    throw err;
+  }
+  const { data, error } = await supabase.functions.invoke("resend-invoice", {
+    body: { inspectionSk },
+  });
+  // Transport / non-2xx (401/403/5xx): unwrap the machine code from the envelope.
+  if (error) {
+    let code = "";
+    try {
+      const parsed = await error.context?.json?.();
+      code = parsed?.error ?? "";
+    } catch (_) {}
+    logError(error, `utils/payments.emailInvoiceToClient sk=${inspectionSk} code="${code}"`);
+    const e = new Error(friendlyInvoiceError(code));
+    e.presentable = true;
+    throw e;
+  }
+  // Business errors return 200 with { ok:false, error } (no_invoice/no_recipients/…).
+  if (!data?.ok) {
+    logError(
+      new Error(data?.error ?? "unknown"),
+      `utils/payments.emailInvoiceToClient sk=${inspectionSk}`,
+    );
+    const e = new Error(friendlyInvoiceError(data?.error));
+    e.presentable = true;
+    throw e;
+  }
+  logEvent("invoice.resent", { sk: inspectionSk, recipientCount: data.recipientCount });
+  return { recipientCount: data.recipientCount };
+}

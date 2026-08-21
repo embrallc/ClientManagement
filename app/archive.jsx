@@ -23,6 +23,7 @@ import {
   setInspectionStatus,
 } from "../db/inspections";
 import { logError } from "../db/logs";
+import { collectInvoiceRecipients } from "../utils/recipients";
 import { useBannerStore } from "../stores/useBannerStore";
 import { useInspectionStore } from "../stores/useInspectionStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
@@ -234,7 +235,11 @@ export default function ArchiveScreen() {
                   disabled={!!busyId}
                   onPress={() =>
                     paymentsLive
-                      ? setPayFor({ sk: item.InspectionSk, name })
+                      ? setPayFor({
+                          sk: item.InspectionSk,
+                          name,
+                          recipients: collectInvoiceRecipients(item),
+                        })
                       : setUpsellOpen(true)
                   }
                 />
@@ -338,6 +343,7 @@ export default function ArchiveScreen() {
         inspectionSk={payFor?.sk}
         clientName={payFor?.name}
         userProfile={userProfile}
+        recipients={payFor?.recipients ?? []}
         onSuccess={() => reload()}
       />
 

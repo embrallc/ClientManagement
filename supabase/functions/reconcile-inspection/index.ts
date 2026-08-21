@@ -181,53 +181,39 @@ serve(async (req) => {
     logInfo("policy_snapshot", { inspectionSk, auto, gate, inv });
   }
 
-  // 2. auto-send off → manual path; nothing is auto-sent. (Reads the FROZEN
-  // snapshot, not the live org toggle — turning auto-send on after completion
-  // does not retroactively send.) But "require payment first" still governs the
-  // report badge on the manual path: hold the report until payment clears so the
-  // owner can see which completed reports are gated (and gets warned before a
-  // manual send). Never touches a report already sent/sending/failed.
-  if (!pSend) {
-    const paid = insp.paid === true;
-    const gated = pGate && !paid;
-    const cur = insp.report_state ?? "pending";
-    if (gated && cur === "pending") {
-      await bumpedUpdate(admin, inspectionSk, { report_state: "held" });
-      void logCloudEvent(admin, SOURCE, "autosend.held", {
-        data: { inspectionSk, reason: "manual_gate" },
-        userId: insp.user_id,
-        orgSk,
-      });
-      return json({ ok: true, reportState: "held", reason: "manual_gate_held" });
-    }
-    if (!gated && cur === "held") {
-      // Payment cleared (or the gate is off) → release the hold back to sendable.
-      await bumpedUpdate(admin, inspectionSk, { report_state: "pending" });
-      return json({ ok: true, reportState: "pending", reason: "manual_gate_released" });
-    }
-    logInfo("skip_auto_send_off", {
-      inspectionSk,
-      policyAutoSendReport: pSend,
-      reportState: cur,
-    });
-    // Only emit the "skipped" telemetry once — when the report is still pending
-    // (i.e. this is the completion-time decision), not on every idempotent re-run.
-    if (cur === "pending") {
+  // 2. Decide intent. A report auto-sends only when there's INTENT to deliver:
+  // either auto-send-report is on (pSend, the frozen snapshot), OR the report is
+  // already "armed" — 'held' (a gated manual send parked it here via resend-report,
+  // or a prior gated auto-send) or 'sending' (a claim already in flight). A plain
+  // 'pending'/'failed' report with auto-send off is on the pure MANUAL path: the
+  // owner delivers it by hand, so we never auto-send OR auto-hold it. (This is why
+  // completing an inspection you never tried to send leaves it 'pending', not
+  // 'held' — payment can't fire out a report you haven't reviewed/sent.)
+  const paid = insp.paid === true;
+  const gateOk = !pGate || paid;
+  const curState = insp.report_state ?? "pending";
+  const armed = pSend || curState === "held" || curState === "sending";
+
+  if (!armed) {
+    logInfo("skip_manual_path", { inspectionSk, reportState: curState });
+    // Emit the "skipped" telemetry once — at the completion-time decision (still
+    // pending), not on every idempotent re-run.
+    if (curState === "pending") {
       void logCloudEvent(admin, SOURCE, "autosend.skipped", {
         data: { inspectionSk, reason: "auto_send_off" },
         userId: insp.user_id,
         orgSk,
       });
     }
-    return json({ ok: true, reportState: cur, reason: "auto_send_off" });
+    return json({ ok: true, reportState: curState, reason: "manual_path" });
   }
 
-  const paid = insp.paid === true;
-  const gateOk = !pGate || paid;
-
-  // 3. Gate not satisfied → hold the report until payment clears.
+  // 3. Armed but the payment gate isn't satisfied → hold until it clears. This is
+  // the single auto-hold point (a gated *manual* send is held in resend-report).
+  // The Stripe webhook + cron sweep re-drive this row the moment 'paid' flips,
+  // landing it in step 4 below — that's the auto-release.
   if (!gateOk) {
-    if (insp.report_state === "pending" || insp.report_state === "failed") {
+    if (curState === "pending" || curState === "failed") {
       await bumpedUpdate(admin, inspectionSk, { report_state: "held" });
       void logCloudEvent(admin, SOURCE, "autosend.held", {
         data: { inspectionSk, reason: "awaiting_payment" },
@@ -243,7 +229,9 @@ serve(async (req) => {
     return json({ ok: true, reportState: "held", reason: "awaiting_payment" });
   }
 
-  // 4. Should send. Atomically claim from a terminal-eligible state so only one
+  // 4. Armed + gate satisfied → SEND. This is the auto-release: a 'held' report
+  // whose payment just cleared fires here whether or not auto-send-report is on.
+  // Atomically claim from a terminal-eligible state so only one
   // concurrent run actually sends.
   const { data: cur } = await admin
     .from("inspections")

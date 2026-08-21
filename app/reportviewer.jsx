@@ -131,20 +131,28 @@ export default function ReportViewerScreen() {
       return;
     }
 
-    const doSend = async () => {
+    // override=true forces delivery past the payment gate ("Send anyway without
+    // payment?"). Otherwise the server may HOLD the report (report_state='held')
+    // instead of sending — a normal outcome we surface as a "held" banner.
+    const doSend = async (override = false) => {
       setSending(true);
       try {
-        const { recipientCount } = await emailReportToClient(inspectionSk);
-        // resend-report just marked report_state='sent'; pull it so the Completed
-        // archive's "Report sent" badge reflects the send (report_state is
-        // server-owned, so it only reaches the device via a sync). Fire-and-forget.
+        const res = await emailReportToClient(inspectionSk, { override });
+        // report_state is server-owned (now 'held' or 'sent'); pull it so the
+        // Completed archive badge reflects reality. Fire-and-forget.
         syncAll().catch(() => {});
-        showBanner({
-          message: `Report sent to ${recipientCount} recipient${
-            recipientCount === 1 ? "" : "s"
-          }.`,
-          kind: "success",
-        });
+        if (res?.held) {
+          showBanner({
+            message: "Report held — the client hasn't paid yet.",
+            kind: "warning",
+          });
+        } else {
+          const n = res.recipientCount;
+          showBanner({
+            message: `Report sent to ${n} recipient${n === 1 ? "" : "s"}.`,
+            kind: "success",
+          });
+        }
       } catch (e) {
         logError(e, `ReportViewer.handleSend sk=${inspectionSk}`);
         showBanner({
@@ -156,22 +164,48 @@ export default function ReportViewerScreen() {
       }
     };
 
-    // "Require payment first" holds the report until the client pays. If it's on
-    // and this inspection isn't paid yet, warn before sending — the owner can still
-    // override ("Send anyway"), which delivers the report and marks it sent.
+    // "Require payment first" holds the report until the client pays — enforced
+    // on the manual path too, not just auto-send:
+    //   • Completed + already Held → offer an explicit override. Confirm delivers
+    //     the report past the gate; Cancel bails. A 'held' state is set only by
+    //     the server (gate on + unpaid), so it's the authoritative trigger here —
+    //     we don't gate the override on the local policy mirror (which can lag).
+    //   • Otherwise gated → HARD HOLD: no email; the server moves it to 'held' and
+    //     we tell the owner (no accidental early delivery). The server is the real
+    //     gate, so even a stale mirror can't leak an unpaid report.
+    //   • Not gated → the normal confirm-then-send flow.
     const gated = requirePaymentFirst && !inspection?.Paid;
-    Alert.alert(
-      gated ? "Payment not received" : "Send report",
-      gated
-        ? `This report is held until the client pays. Send it to them anyway?\n\n${recipients.join(
-            "\n",
-          )}`
-        : `Email the report to:\n\n${recipients.join("\n")}`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: gated ? "Send anyway" : "Send", onPress: doSend },
-      ],
-    );
+    const isCompleted = (inspection?.Status ?? "OPEN") === "CLOSED";
+    const isHeld = inspection?.ReportState === "held";
+
+    if (isCompleted && isHeld) {
+      Alert.alert(
+        "Send anyway without payment?",
+        `The client hasn't paid, so this report is on hold. Send it to them now anyway?\n\n${recipients.join(
+          "\n",
+        )}`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Send anyway",
+            style: "destructive",
+            onPress: () => doSend(true),
+          },
+        ],
+      );
+      return;
+    }
+
+    if (gated) {
+      // Hard hold — the manual path never emails an unpaid client.
+      doSend(false);
+      return;
+    }
+
+    Alert.alert("Send report", `Email the report to:\n\n${recipients.join("\n")}`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Send", onPress: () => doSend(false) },
+    ]);
   });
 
   const handleText = useDebouncedPress(async () => {

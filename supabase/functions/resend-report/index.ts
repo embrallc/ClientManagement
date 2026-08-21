@@ -6,8 +6,12 @@
 // address registered on the REPORT channel via Resend. Cross-platform by design:
 // nothing depends on the device's mail app.
 //
-// It owns NO state — the one-time auto-send gate (report_state) is untouched;
-// this is the deliberate, rare manual re-send path. Best-effort event log only.
+// On a successful send it marks report_state='sent' (the server-owned auto-send
+// gate). This is intentional: a manual send means the owner is delivering the
+// report themselves, so it BOTH suppresses auto-send-on-complete (no duplicate)
+// AND drives the "Report sent" badge in the Completed archive — the signal a
+// no-auto-send owner uses to see which completed reports still need sending.
+// Best-effort event log too.
 //
 // Auth: a normal user JWT (verify_jwt=true). The inspection must belong to the
 // caller. Body: { inspectionSk }. Returns { ok, recipientCount } or { ok:false, error }.
@@ -36,6 +40,25 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+// Read the row's current _version and write a patch with _version+1 so synced
+// devices pull the change (mirrors reconcile-inspection's helper).
+async function bumpedUpdate(
+  admin: SupabaseClient,
+  inspectionSk: string,
+  patch: Record<string, unknown>,
+) {
+  const { data: cur } = await admin
+    .from("inspections")
+    .select("_version")
+    .eq("inspection_sk", inspectionSk)
+    .maybeSingle();
+  const nextVersion = Number(cur?._version ?? 1) + 1;
+  return admin
+    .from("inspections")
+    .update({ ...patch, _version: nextVersion, _last_changed_at: Date.now() })
+    .eq("inspection_sk", inspectionSk);
 }
 
 serve(async (req) => {
@@ -80,7 +103,7 @@ serve(async (req) => {
   const { data: insp, error: inspErr } = await admin
     .from("inspections")
     .select(
-      "inspection_sk, user_id, org_sk, full_name, address_line1, city, state, email, report_recipients",
+      "inspection_sk, user_id, org_sk, full_name, address_line1, city, state, email, report_recipients, report_state",
     )
     .eq("inspection_sk", inspectionSk)
     .maybeSingle();
@@ -152,5 +175,16 @@ serve(async (req) => {
     orgSk: insp.org_sk ?? null,
     data: { inspectionSk, recipientCount: recipients.length, id: sent.id },
   });
+
+  // Claim the report as sent (server-owned state; the device never pushes it,
+  // always pulls it). A manual send deliberately owns delivery: setting 'sent'
+  // suppresses auto-send-on-complete (the reconciler only sends from
+  // pending/held/failed) AND drives the "Report sent" badge in the Completed
+  // archive. Applies whether the inspection is still open or already closed;
+  // skipped when already 'sent' (no redundant version bump).
+  if (insp.report_state !== "sent") {
+    await bumpedUpdate(admin, inspectionSk, { report_state: "sent" });
+  }
+
   return json({ ok: true, recipientCount: recipients.length });
 });

@@ -39,6 +39,7 @@ import {
   getOrRestoreReport,
   reportFileName,
 } from "../utils/reports";
+import { syncAll } from "../utils/sync";
 
 let WebView = null;
 try {
@@ -138,6 +139,11 @@ export default function ReportViewerScreen() {
             setSending(true);
             try {
               const { recipientCount } = await emailReportToClient(inspectionSk);
+              // resend-report just marked report_state='sent' for a completed
+              // inspection; pull it so the Completed archive's "Report sent" badge
+              // reflects the send (report_state is server-owned, so it only reaches
+              // the device via a sync). Fire-and-forget.
+              syncAll().catch(() => {});
               showBanner({
                 message: `Report sent to ${recipientCount} recipient${
                   recipientCount === 1 ? "" : "s"

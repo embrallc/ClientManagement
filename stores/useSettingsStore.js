@@ -60,6 +60,10 @@ export const useSettingsStore = create((set, get) => ({
   // Same caching model as autoSendInvoice; used to warn before an OFFLINE completion,
   // since auto-send generates the report server-side (needs a connection).
   autoSendReport: false,
+  // Cached org policy organizations.require_payment_first ("require payment first").
+  // Holds the report until the client pays; used to warn before a MANUAL send while
+  // the inspection is unpaid (report viewer). Same caching model as autoSendReport.
+  requirePaymentFirst: false,
   fname: null,
   lname: null,
   apptLengthMinutes: 60,
@@ -352,6 +356,10 @@ export const useSettingsStore = create((set, get) => ({
 
   setAutoSendReport: (val) => {
     set({ autoSendReport: !!val });
+  },
+
+  setRequirePaymentFirst: (val) => {
+    set({ requirePaymentFirst: !!val });
   },
 
   setFname: (val) => {

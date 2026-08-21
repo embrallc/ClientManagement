@@ -32,6 +32,7 @@ import { logError } from "../db/logs";
 import { useDebouncedPress } from "../hooks/useDebouncedPress";
 import { useBannerStore } from "../stores/useBannerStore";
 import { useInspectionStore } from "../stores/useInspectionStore";
+import { useSettingsStore } from "../stores/useSettingsStore";
 import { collectReportRecipients } from "../utils/recipients";
 import {
   emailReportToClient,
@@ -53,6 +54,7 @@ export default function ReportViewerScreen() {
   const { inspectionSk } = useLocalSearchParams();
   const storeInspection = useInspectionStore((s) => s.inspections[inspectionSk]);
   const showBanner = useBannerStore((s) => s.show);
+  const requirePaymentFirst = useSettingsStore((s) => s.requirePaymentFirst);
 
   // Completed/archived inspections aren't in the active store — fall back to
   // SQLite so the Archive's "Report" action resolves them. undefined = still
@@ -128,39 +130,46 @@ export default function ReportViewerScreen() {
       });
       return;
     }
+
+    const doSend = async () => {
+      setSending(true);
+      try {
+        const { recipientCount } = await emailReportToClient(inspectionSk);
+        // resend-report just marked report_state='sent'; pull it so the Completed
+        // archive's "Report sent" badge reflects the send (report_state is
+        // server-owned, so it only reaches the device via a sync). Fire-and-forget.
+        syncAll().catch(() => {});
+        showBanner({
+          message: `Report sent to ${recipientCount} recipient${
+            recipientCount === 1 ? "" : "s"
+          }.`,
+          kind: "success",
+        });
+      } catch (e) {
+        logError(e, `ReportViewer.handleSend sk=${inspectionSk}`);
+        showBanner({
+          message: e?.presentable ? e.message : "Couldn't send the report.",
+          kind: "error",
+        });
+      } finally {
+        setSending(false);
+      }
+    };
+
+    // "Require payment first" holds the report until the client pays. If it's on
+    // and this inspection isn't paid yet, warn before sending — the owner can still
+    // override ("Send anyway"), which delivers the report and marks it sent.
+    const gated = requirePaymentFirst && !inspection?.Paid;
     Alert.alert(
-      "Send report",
-      `Email the report to:\n\n${recipients.join("\n")}`,
+      gated ? "Payment not received" : "Send report",
+      gated
+        ? `This report is held until the client pays. Send it to them anyway?\n\n${recipients.join(
+            "\n",
+          )}`
+        : `Email the report to:\n\n${recipients.join("\n")}`,
       [
         { text: "Cancel", style: "cancel" },
-        {
-          text: "Send",
-          onPress: async () => {
-            setSending(true);
-            try {
-              const { recipientCount } = await emailReportToClient(inspectionSk);
-              // resend-report just marked report_state='sent' for a completed
-              // inspection; pull it so the Completed archive's "Report sent" badge
-              // reflects the send (report_state is server-owned, so it only reaches
-              // the device via a sync). Fire-and-forget.
-              syncAll().catch(() => {});
-              showBanner({
-                message: `Report sent to ${recipientCount} recipient${
-                  recipientCount === 1 ? "" : "s"
-                }.`,
-                kind: "success",
-              });
-            } catch (e) {
-              logError(e, `ReportViewer.handleSend sk=${inspectionSk}`);
-              showBanner({
-                message: e?.presentable ? e.message : "Couldn't send the report.",
-                kind: "error",
-              });
-            } finally {
-              setSending(false);
-            }
-          },
-        },
+        { text: gated ? "Send anyway" : "Send", onPress: doSend },
       ],
     );
   });

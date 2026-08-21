@@ -84,6 +84,9 @@ function RootLayout() {
   const setPaymentsLive = useSettingsStore((s) => s.setPaymentsLive);
   const setAutoSendInvoice = useSettingsStore((s) => s.setAutoSendInvoice);
   const setAutoSendReport = useSettingsStore((s) => s.setAutoSendReport);
+  const setRequirePaymentFirst = useSettingsStore(
+    (s) => s.setRequirePaymentFirst,
+  );
   const setFname = useSettingsStore((s) => s.setFname);
   const setLname = useSettingsStore((s) => s.setLname);
   const loadSmsTemplates = useSmsStore((s) => s.load);
@@ -134,6 +137,7 @@ function RootLayout() {
           setPaymentsLive(!!s?.stripe_charges_enabled);
           setAutoSendInvoice(!!s?.auto_send_invoice);
           setAutoSendReport(!!s?.auto_send_report);
+          setRequirePaymentFirst(!!s?.require_payment_first);
         })
         .catch((e) => logError(e, "RootLayout.loadUserData.paymentStatus"));
     }

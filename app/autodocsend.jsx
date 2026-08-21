@@ -33,6 +33,9 @@ export default function AutoDocSendScreen() {
   const userProfile = useSettingsStore((s) => s.userProfile);
   const setAutoSendInvoice = useSettingsStore((s) => s.setAutoSendInvoice);
   const setAutoSendReport = useSettingsStore((s) => s.setAutoSendReport);
+  const setRequirePaymentFirst = useSettingsStore(
+    (s) => s.setRequirePaymentFirst,
+  );
 
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -58,6 +61,7 @@ export default function AutoDocSendScreen() {
       // prompts for an amount when this is on) sees changes without a reboot.
       if (s) setAutoSendInvoice(!!s.auto_send_invoice);
       if (s) setAutoSendReport(!!s.auto_send_report);
+      if (s) setRequirePaymentFirst(!!s.require_payment_first);
     } catch (e) {
       logError(e, "AutoDocSend.reload");
       setOffline(true);
@@ -65,7 +69,7 @@ export default function AutoDocSendScreen() {
     } finally {
       setLoading(false);
     }
-  }, [orgSk, setAutoSendInvoice, setAutoSendReport]);
+  }, [orgSk, setAutoSendInvoice, setAutoSendReport, setRequirePaymentFirst]);
 
   useEffect(() => {
     reload();
@@ -78,6 +82,7 @@ export default function AutoDocSendScreen() {
     setStatus((s) => ({ ...s, [key]: val }));
     if (key === "auto_send_invoice") setAutoSendInvoice(val);
     if (key === "auto_send_report") setAutoSendReport(val);
+    if (key === "require_payment_first") setRequirePaymentFirst(val);
     try {
       await setOrgPaymentPolicy(orgSk, { [key]: val });
     } catch (e) {
@@ -85,6 +90,8 @@ export default function AutoDocSendScreen() {
       setStatus(prev);
       if (key === "auto_send_invoice") setAutoSendInvoice(!!prev?.auto_send_invoice);
       if (key === "auto_send_report") setAutoSendReport(!!prev?.auto_send_report);
+      if (key === "require_payment_first")
+        setRequirePaymentFirst(!!prev?.require_payment_first);
       Alert.alert("Couldn't save", "That setting didn't save. Please try again.");
     }
   }

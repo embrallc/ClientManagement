@@ -181,25 +181,45 @@ serve(async (req) => {
     logInfo("policy_snapshot", { inspectionSk, auto, gate, inv });
   }
 
-  // 2. auto-send off → manual path; nothing to converge. (Reads the FROZEN
+  // 2. auto-send off → manual path; nothing is auto-sent. (Reads the FROZEN
   // snapshot, not the live org toggle — turning auto-send on after completion
-  // does not retroactively send.)
+  // does not retroactively send.) But "require payment first" still governs the
+  // report badge on the manual path: hold the report until payment clears so the
+  // owner can see which completed reports are gated (and gets warned before a
+  // manual send). Never touches a report already sent/sending/failed.
   if (!pSend) {
+    const paid = insp.paid === true;
+    const gated = pGate && !paid;
+    const cur = insp.report_state ?? "pending";
+    if (gated && cur === "pending") {
+      await bumpedUpdate(admin, inspectionSk, { report_state: "held" });
+      void logCloudEvent(admin, SOURCE, "autosend.held", {
+        data: { inspectionSk, reason: "manual_gate" },
+        userId: insp.user_id,
+        orgSk,
+      });
+      return json({ ok: true, reportState: "held", reason: "manual_gate_held" });
+    }
+    if (!gated && cur === "held") {
+      // Payment cleared (or the gate is off) → release the hold back to sendable.
+      await bumpedUpdate(admin, inspectionSk, { report_state: "pending" });
+      return json({ ok: true, reportState: "pending", reason: "manual_gate_released" });
+    }
     logInfo("skip_auto_send_off", {
       inspectionSk,
       policyAutoSendReport: pSend,
-      reportState: insp.report_state,
+      reportState: cur,
     });
     // Only emit the "skipped" telemetry once — when the report is still pending
     // (i.e. this is the completion-time decision), not on every idempotent re-run.
-    if ((insp.report_state ?? "pending") === "pending") {
+    if (cur === "pending") {
       void logCloudEvent(admin, SOURCE, "autosend.skipped", {
         data: { inspectionSk, reason: "auto_send_off" },
         userId: insp.user_id,
         orgSk,
       });
     }
-    return json({ ok: true, reportState: insp.report_state, reason: "auto_send_off" });
+    return json({ ok: true, reportState: cur, reason: "auto_send_off" });
   }
 
   const paid = insp.paid === true;

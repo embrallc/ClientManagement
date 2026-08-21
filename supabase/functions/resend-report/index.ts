@@ -13,8 +13,15 @@
 // no-auto-send owner uses to see which completed reports still need sending.
 // Best-effort event log too.
 //
+// Payment gate: when the org's "Require Payment First" is on and the inspection
+// is unpaid, a plain send is HELD (report_state='held', no email) instead of
+// delivered — the gate is enforced here, not just on auto-send. The owner can
+// force delivery with override=true (the app's "Send anyway without payment?"
+// confirmation on a completed, held report).
+//
 // Auth: a normal user JWT (verify_jwt=true). The inspection must belong to the
-// caller. Body: { inspectionSk }. Returns { ok, recipientCount } or { ok:false, error }.
+// caller. Body: { inspectionSk, override? }. Returns { ok, recipientCount },
+// { ok:false, error:"payment_required", held:true }, or { ok:false, error }.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
@@ -86,7 +93,7 @@ serve(async (req) => {
   if (userErr || !userData?.user) return json({ ok: false, error: "invalid_token" }, 401);
   const userId = userData.user.id;
 
-  let body: { inspectionSk?: string } = {};
+  let body: { inspectionSk?: string; override?: boolean } = {};
   try {
     body = await req.json();
   } catch (_) {
@@ -103,7 +110,7 @@ serve(async (req) => {
   const { data: insp, error: inspErr } = await admin
     .from("inspections")
     .select(
-      "inspection_sk, user_id, org_sk, full_name, address_line1, city, state, email, report_recipients, report_state",
+      "inspection_sk, user_id, org_sk, full_name, address_line1, city, state, email, report_recipients, report_state, paid, status, policy_require_payment_first",
     )
     .eq("inspection_sk", inspectionSk)
     .maybeSingle();
@@ -113,6 +120,44 @@ serve(async (req) => {
   }
   if (!insp) return json({ ok: false, error: "inspection_not_found" }, 404);
   if (insp.user_id !== userId) return json({ ok: false, error: "forbidden" }, 403);
+
+  // 2.5. Payment gate — "Require Payment First" is enforced on the manual send
+  // path too, not just auto-send. When it's on and the inspection is unpaid, a
+  // plain Send does NOT email the client: it HOLDS the report (report_state=
+  // 'held' → the "awaiting payment" badge) and returns so the app can tell the
+  // owner. The owner forces delivery by passing override=true (the app's
+  // "Send anyway without payment?" confirmation on a completed, held report).
+  // The gate value is the frozen per-inspection policy once completed; before
+  // completion it isn't frozen yet, so fall back to the org's live toggle.
+  const paid = insp.paid === true;
+  let gate = insp.policy_require_payment_first;
+  if (gate === null || gate === undefined) {
+    if (insp.org_sk) {
+      const { data: org } = await admin
+        .from("organizations")
+        .select("require_payment_first")
+        .eq("org_sk", insp.org_sk)
+        .maybeSingle();
+      gate = !!org?.require_payment_first;
+    } else {
+      gate = false;
+    }
+  }
+  const override = body.override === true;
+  if (gate && !paid && !override) {
+    // Move it into 'held' from any not-yet-delivered state so the badge reflects
+    // the hold; never step on a report that's already sent/sending/held.
+    const rs = insp.report_state;
+    if (rs !== "sent" && rs !== "sending" && rs !== "held") {
+      await bumpedUpdate(admin, inspectionSk, { report_state: "held" });
+    }
+    void logCloudEvent(admin, SOURCE, "report.held", {
+      userId,
+      orgSk: insp.org_sk ?? null,
+      data: { inspectionSk, reason: "payment_required" },
+    });
+    return json({ ok: false, error: "payment_required", held: true }, 200);
+  }
 
   // 3. Recipients — everyone on the REPORT channel (same selection as auto-send).
   const recipients = channelRecipients(insp.report_recipients, insp.email, "report");

@@ -229,8 +229,15 @@ function friendlyResendError(code) {
 // report recipients via Resend (the resend-report Edge Function). Cross-platform
 // — no device mail app involved, unlike the old share-sheet path. Reuses the
 // latest generated PDF (Generate makes a fresh one; Send mails the latest).
-// Throws with a presentable `message`; resolves { recipientCount } on success.
-export async function emailReportToClient(inspectionSk) {
+//
+// Payment gate: when "Require Payment First" is on and the client hasn't paid,
+// the EF HOLDS the report instead of sending (report_state='held'); that comes
+// back as { held:true } — a normal outcome, not an error. Pass { override:true }
+// to force delivery anyway (the "Send anyway without payment?" path).
+//
+// Throws with a presentable `message`; resolves { recipientCount } when sent, or
+// { held:true } when the payment gate held it.
+export async function emailReportToClient(inspectionSk, { override = false } = {}) {
   if (!inspectionSk) throw new Error("missing inspection");
   if (!isOnline()) {
     const err = new Error("You're offline — sending the report needs a connection.");
@@ -238,7 +245,7 @@ export async function emailReportToClient(inspectionSk) {
     throw err;
   }
   const { data, error } = await supabase.functions.invoke("resend-report", {
-    body: { inspectionSk },
+    body: { inspectionSk, override },
   });
   // Transport / non-2xx (401/403/5xx): unwrap the machine code from the envelope.
   if (error) {
@@ -251,6 +258,12 @@ export async function emailReportToClient(inspectionSk) {
     const e = new Error(friendlyResendError(code));
     e.presentable = true;
     throw e;
+  }
+  // Payment gate held the report (200 { ok:false, error:"payment_required",
+  // held:true }) — not a failure, so surface it to the caller as a held result.
+  if (data?.held || data?.error === "payment_required") {
+    logEvent("report.held", { sk: inspectionSk, reason: "payment_required" });
+    return { held: true };
   }
   // Business errors return 200 with { ok:false, error } (no_report/no_recipients/…).
   if (!data?.ok) {

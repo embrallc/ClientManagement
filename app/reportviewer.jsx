@@ -36,6 +36,7 @@ import { useSettingsStore } from "../stores/useSettingsStore";
 import { collectReportRecipients } from "../utils/recipients";
 import {
   emailReportToClient,
+  fetchReportHtml,
   generateInspectionReport,
   getOrRestoreReport,
   reportFileName,
@@ -79,6 +80,15 @@ export default function ReportViewerScreen() {
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
 
+  // Interactive HTML report. viewMode defaults to the HTML view (nicer + works on
+  // both platforms); PDF stays available for download/share. htmlState:
+  // 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'. `htmlReloadKey` bumps
+  // to refetch after a regenerate.
+  const [viewMode, setViewMode] = useState("html");
+  const [htmlState, setHtmlState] = useState("idle");
+  const [htmlContent, setHtmlContent] = useState(null);
+  const [htmlReloadKey, setHtmlReloadKey] = useState(0);
+
   useEffect(() => {
     if (!inspection) return; // wait for the store/SQLite lookup to resolve
     let alive = true;
@@ -95,6 +105,35 @@ export default function ReportViewerScreen() {
     };
   }, [inspection?.InspectionSk, inspection?.LastReportPath]);
 
+  // Load the interactive HTML once a report exists. no_model (pre-Phase-0 report)
+  // resolves to { unavailable } → we quietly fall back to the PDF view.
+  useEffect(() => {
+    if (fileState !== "ready" || !inspectionSk) return;
+    let alive = true;
+    setHtmlState("loading");
+    fetchReportHtml(inspectionSk)
+      .then((res) => {
+        if (!alive) return;
+        if (res.html) {
+          setHtmlContent(res.html);
+          setHtmlState("ready");
+        } else {
+          setHtmlContent(null);
+          setHtmlState("unavailable");
+          setViewMode("pdf");
+        }
+      })
+      .catch((e) => {
+        if (!alive) return;
+        logError(e, `ReportViewer.loadHtml sk=${inspectionSk}`);
+        setHtmlState("error");
+        setViewMode("pdf");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [fileState, inspectionSk, htmlReloadKey]);
+
   const handleGenerate = useDebouncedPress(async () => {
     if (generating || !inspection) return;
     setGenerating(true);
@@ -102,6 +141,9 @@ export default function ReportViewerScreen() {
       const result = await generateInspectionReport(inspection);
       setPath(result.path);
       setFileState("ready");
+      // A fresh report has a fresh model — reload the interactive view and show it.
+      setViewMode("html");
+      setHtmlReloadKey((k) => k + 1);
       showBanner({ message: "Report generated.", kind: "success" });
     } catch (e) {
       logError(e, `ReportViewer.handleGenerate sk=${inspectionSk}`);
@@ -322,43 +364,107 @@ export default function ReportViewerScreen() {
         </View>
       )}
 
-      {fileState === "ready" &&
-        (canPreview ? (
-          <WebView
-            style={styles.viewer}
-            source={{ uri: path }}
-            // Only the local PDF may render in-app; links inside the PDF
-            // open in the system browser instead of hijacking this view.
-            originWhitelist={["file://*", "about:*"]}
-            onShouldStartLoadWithRequest={(req) => {
-              if (
-                req.url.startsWith("file://") ||
-                req.url.startsWith("about:")
-              ) {
-                return true;
+      {fileState === "ready" && (
+        <>
+          {/* Interactive / PDF toggle — only when the interactive report is ready. */}
+          {htmlState === "ready" && !!WebView && (
+            <View style={styles.toggleRow}>
+              <TouchableOpacity
+                style={[styles.toggleBtn, viewMode === "html" && styles.toggleBtnActive]}
+                onPress={() => setViewMode("html")}
+                activeOpacity={0.85}
+              >
+                <MaterialCommunityIcons
+                  name="cellphone-text"
+                  size={16}
+                  color={viewMode === "html" ? "#fff" : theme?.colors?.textSubtle}
+                />
+                <Text style={[styles.toggleText, viewMode === "html" && styles.toggleTextActive]}>
+                  Interactive
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toggleBtn, viewMode === "pdf" && styles.toggleBtnActive]}
+                onPress={() => setViewMode("pdf")}
+                activeOpacity={0.85}
+              >
+                <MaterialCommunityIcons
+                  name="file-pdf-box"
+                  size={16}
+                  color={viewMode === "pdf" ? "#fff" : theme?.colors?.textSubtle}
+                />
+                <Text style={[styles.toggleText, viewMode === "pdf" && styles.toggleTextActive]}>
+                  PDF
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {viewMode === "html" ? (
+            htmlState === "ready" && WebView ? (
+              <WebView
+                style={styles.viewer}
+                originWhitelist={["*"]}
+                source={{ html: htmlContent }}
+                // Render the report in-place; a tapped external link (future
+                // "pay invoice" etc.) opens in the system browser.
+                onShouldStartLoadWithRequest={(req) => {
+                  if (req.navigationType === "click" && /^https?:/.test(req.url)) {
+                    Linking.openURL(req.url).catch(() => {});
+                    return false;
+                  }
+                  return true;
+                }}
+                startInLoadingState
+                renderLoading={() => (
+                  <View style={styles.viewerLoading}>
+                    <ActivityIndicator size="large" color={theme?.colors?.primary} />
+                  </View>
+                )}
+              />
+            ) : htmlState === "error" || htmlState === "unavailable" ? (
+              <Center
+                icon="file-refresh-outline"
+                text="The interactive report isn't available for this version — regenerate the report to enable it, or view the PDF."
+              />
+            ) : (
+              <Center spinner text="Preparing report…" />
+            )
+          ) : canPreview ? (
+            <WebView
+              style={styles.viewer}
+              source={{ uri: path }}
+              // Only the local PDF may render in-app; links inside the PDF
+              // open in the system browser instead of hijacking this view.
+              originWhitelist={["file://*", "about:*"]}
+              onShouldStartLoadWithRequest={(req) => {
+                if (req.url.startsWith("file://") || req.url.startsWith("about:")) {
+                  return true;
+                }
+                Linking.openURL(req.url).catch(() => {});
+                return false;
+              }}
+              allowFileAccess
+              allowingReadAccessToURL={path}
+              startInLoadingState
+              renderLoading={() => (
+                <View style={styles.viewerLoading}>
+                  <ActivityIndicator size="large" color={theme?.colors?.primary} />
+                </View>
+              )}
+            />
+          ) : (
+            <Center
+              icon="file-check-outline"
+              text={
+                WebView
+                  ? "The PDF is ready. In-app PDF preview isn't supported on Android — use the buttons below to send it, or switch to the Interactive view."
+                  : "The report is ready. Preview needs an app update — use the buttons below to send it."
               }
-              Linking.openURL(req.url).catch(() => {});
-              return false;
-            }}
-            allowFileAccess
-            allowingReadAccessToURL={path}
-            startInLoadingState
-            renderLoading={() => (
-              <View style={styles.viewerLoading}>
-                <ActivityIndicator size="large" color={theme?.colors?.primary} />
-              </View>
-            )}
-          />
-        ) : (
-          <Center
-            icon="file-check-outline"
-            text={
-              WebView
-                ? "The report is ready. In-app preview isn't supported on Android yet — use the buttons below to send it."
-                : "The report is ready. Preview needs an app update — use the buttons below to send it."
-            }
-          />
-        ))}
+            />
+          )}
+        </>
+      )}
 
       {fileState === "ready" && (
         <View style={styles.shareRow}>
@@ -472,6 +578,35 @@ const styles = StyleSheet.create({
     ...(theme?.typography?.caption ?? {}),
     color: theme?.colors?.textFine,
     marginTop: 1,
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignSelf: "center",
+    gap: 3,
+    marginTop: theme?.spacing?.s,
+    marginBottom: theme?.spacing?.xs,
+    padding: 3,
+    backgroundColor: theme?.colors?.input,
+    borderRadius: theme?.layout?.borderRadius?.full,
+  },
+  toggleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: theme?.layout?.borderRadius?.full,
+  },
+  toggleBtnActive: {
+    backgroundColor: theme?.colors?.primary,
+  },
+  toggleText: {
+    ...(theme?.typography?.caption ?? {}),
+    color: theme?.colors?.textSubtle,
+    fontWeight: "600",
+  },
+  toggleTextActive: {
+    color: "#fff",
   },
   viewer: {
     flex: 1,

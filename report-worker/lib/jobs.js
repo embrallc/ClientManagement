@@ -50,6 +50,40 @@ export async function signReport(storagePath) {
   return data.signedUrl;
 }
 
+// ── HTML report model (Phase 0) ──────────────────────────────────────────────
+// The semantic ReportModel JSON is stored as a SIBLING of the PDF: same path,
+// `.model.json` instead of `.pdf`. Kept in the same private bucket; a later
+// surface (in-app HTML view, hosted client viewer) loads it + signs photos fresh.
+export function buildModelPath(pdfStoragePath) {
+  return pdfStoragePath.replace(/\.pdf$/i, ".model.json");
+}
+
+export async function uploadModel(storagePath, model) {
+  const body = Buffer.from(JSON.stringify(model), "utf8");
+  const { error } = await admin.storage
+    .from(REPORT_BUCKET)
+    .upload(storagePath, body, {
+      contentType: "application/json",
+      upsert: false,
+    });
+  if (error) throw new Error(`uploadModel: ${error.message}`);
+}
+
+// Best-effort: store the model beside the PDF and return its path (or null). The
+// PDF is the user-facing artifact and the model is an enhancement, so a failure
+// here logs and is swallowed — it must never break report generation.
+export async function storeModel(pdfStoragePath, model) {
+  if (!model) return null;
+  try {
+    const modelPath = buildModelPath(pdfStoragePath);
+    await uploadModel(modelPath, model);
+    return modelPath;
+  } catch (e) {
+    console.error("[worker] storeModel failed:", e?.message);
+    return null;
+  }
+}
+
 // Mirror generate-report's inspection_reports record so the canonical "a report
 // was generated" history stays in one table. Non-fatal: the PDF + report_jobs
 // row are the user-facing artifacts, so we log and continue if this insert
@@ -59,6 +93,7 @@ export async function recordReport({
   orgId,
   userId,
   storagePath,
+  modelPath = null,
   sizeBytes,
   pageCount = 1,
 }) {
@@ -67,6 +102,7 @@ export async function recordReport({
     org_sk: orgId ?? null,
     user_id: userId,
     storage_path: storagePath,
+    model_path: modelPath ?? null,
     page_count: pageCount,
     size_bytes: sizeBytes,
     generated_at: new Date().toISOString(),

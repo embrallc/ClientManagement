@@ -458,6 +458,11 @@ verify_jwt = true
 # bearer that the gateway validates; keep JWT verification on.
 verify_jwt = true
 
+[functions.report-view]
+# Device opens the report viewer; the owner's JWT authorizes it. Returns the
+# interactive HTML report (rendered from the stored ReportModel).
+verify_jwt = true
+
 [functions.resend-invoice]
 # User taps "Email" in the Request Payment sheet; the owner's JWT authorizes it.
 verify_jwt = true

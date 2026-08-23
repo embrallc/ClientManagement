@@ -18,7 +18,16 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import sharp from "sharp";
 import { admin } from "./supabase.js";
 import { walkthroughToReport } from "./shared/walkthroughToReport.js";
-import { SEVERITY_LEVELS } from "./shared/walkthroughSchema.js";
+import {
+  addressFull,
+  addressStreet,
+  camelToSnake,
+  cityStateZip,
+  formatDate,
+  formatFieldValue,
+  severityColor,
+} from "./shared/reportFormat.js";
+import { buildReportModel } from "./shared/reportModel.js";
 
 const TAG = "[render]";
 
@@ -60,68 +69,12 @@ function logError(event, err, fields = {}) {
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
-function camelToSnake(s) {
-  return s.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
-}
-
 function hexToRgb(hex, fallback = "#111827") {
   let h = (hex ?? fallback).replace("#", "");
   if (h.length === 3) h = h.split("").map((c) => c + c).join("");
   const n = parseInt(h, 16);
   if (!Number.isFinite(n) || h.length !== 6) return hexToRgb(fallback);
   return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
-}
-
-const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-function formatDate(iso, tzOffsetMin, withTime) {
-  if (!iso) return "";
-  const ms = new Date(iso).getTime();
-  if (!Number.isFinite(ms)) return "";
-  const d = new Date(ms + tzOffsetMin * 60000);
-  let out = `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
-  if (withTime) {
-    let h = d.getUTCHours();
-    const m = d.getUTCMinutes().toString().padStart(2, "0");
-    const ampm = h >= 12 ? "PM" : "AM";
-    h = h % 12 || 12;
-    out += ` ${h}:${m} ${ampm}`;
-  }
-  return out;
-}
-
-// Assemble address forms from the inspection's parts (empty parts skipped).
-function inspStr(inspection, col) {
-  const v = inspection[col];
-  return v == null ? "" : String(v).trim();
-}
-function addressStreet(inspection) {
-  return [inspStr(inspection, "address_line1"), inspStr(inspection, "address_line2")]
-    .filter(Boolean).join(", ");
-}
-function cityStateZip(inspection) {
-  const cityState = [inspStr(inspection, "city"), inspStr(inspection, "state")]
-    .filter(Boolean).join(", ");
-  return [cityState, inspStr(inspection, "zip_code")].filter(Boolean).join(" ");
-}
-function addressFull(inspection) {
-  return [addressStreet(inspection), cityStateZip(inspection)].filter(Boolean).join(", ");
-}
-
-function severityColor(value) {
-  const v = (value ?? "").toLowerCase();
-  for (const lvl of SEVERITY_LEVELS) {
-    if (lvl.label.toLowerCase() === v || lvl.key.toLowerCase() === v) {
-      return lvl.color;
-    }
-  }
-  if (/(low|good|minor|ok)/.test(v)) return "#16A34A";
-  if (/(med|moderate|fair)/.test(v)) return "#D97706";
-  if (/(high|severe|critical|major|poor)/.test(v)) return "#DC2626";
-  return null;
 }
 
 function roundedRectPath(w, h, r) {
@@ -141,48 +94,6 @@ function roundedRectPath(w, h, r) {
 }
 
 // ── Binding resolution ───────────────────────────────────────────────────────
-
-function formatFieldValue(meta, value) {
-  if (value == null) return "";
-  switch (meta.type) {
-    case "toggle":
-      return value === true ? "Yes" : value === false ? "No" : "";
-    case "radio":
-    case "dropdown":
-      return (meta.options ?? []).find((o) => o.id === value)?.label ?? "";
-    case "checkbox":
-      if (!Array.isArray(value)) return "";
-      return value
-        .map((id) => (meta.options ?? []).find((o) => o.id === id)?.label)
-        .filter(Boolean)
-        .join(", ");
-    case "severity":
-      return SEVERITY_LEVELS.find((l) => l.key === value)?.label ?? String(value);
-    case "measurement": {
-      const v = typeof value === "string" ? value.trim() : String(value);
-      if (!v) return "";
-      return meta.unit ? `${v} ${meta.unit}` : v;
-    }
-    case "date":
-      return typeof value === "string" ? formatDateOnly(value) : "";
-    default:
-      return typeof value === "string" ? value : String(value);
-  }
-}
-
-// A walkthrough date field stores an ISO "YYYY-MM-DD" string; print it in a
-// readable, locale-free form without any timezone shift.
-const DATE_MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-function formatDateOnly(s) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
-  if (!m) return s;
-  const mi = parseInt(m[2], 10) - 1;
-  if (mi < 0 || mi > 11) return s;
-  return `${DATE_MONTHS[mi]} ${parseInt(m[3], 10)}, ${m[1]}`;
-}
 
 function bindingFieldMeta(binding, ctx) {
   if (typeof binding === "string" && binding.startsWith("wt.")) {
@@ -658,9 +569,10 @@ export async function renderInspectionReport({
   }
 
   // 7. Layout every band instance, then place with keep-together pagination.
+  const inspectorName = [profile?.fname, profile?.lname].filter(Boolean).join(" ");
   const ctx = {
     inspection,
-    inspectorName: [profile?.fname, profile?.lname].filter(Boolean).join(" "),
+    inspectorName,
     orgName,
     tzOffsetMin,
     fieldIndex,
@@ -978,6 +890,23 @@ export async function renderInspectionReport({
     }
   }
 
+  // Semantic ReportModel for the HTML report — built from the walkthrough data
+  // only (decoupled from the PDF band layout). Best-effort: a model failure must
+  // NEVER fail the PDF, so we log and return model:null.
+  let model = null;
+  try {
+    model = buildReportModel({
+      inspection,
+      inspectorName,
+      orgName,
+      wtSchema,
+      answers,
+      tzOffsetMin,
+    });
+  } catch (e) {
+    logError("build_model_failed", e, { inspectionSk });
+  }
+
   const bytes = await pdf.save();
-  return { bytes, pageCount, skippedPhotos, usedDraft, autoBuilt };
+  return { bytes, pageCount, skippedPhotos, usedDraft, autoBuilt, model };
 }

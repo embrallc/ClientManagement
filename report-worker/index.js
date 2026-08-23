@@ -7,6 +7,7 @@ import {
   recordReport,
   setJobStatus,
   signReport,
+  storeModel,
   uploadReport,
 } from "./lib/jobs.js";
 import { admin, getUserFromJwt, isConfigured } from "./lib/supabase.js";
@@ -142,7 +143,7 @@ app.post("/api/render-internal", async (req, res) => {
       orgId = u?.org_sk ?? null;
     }
 
-    const { bytes, pageCount } = await renderInspectionReport({
+    const { bytes, pageCount, model } = await renderInspectionReport({
       inspectionSk,
       userId,
       orgSk: orgId,
@@ -150,11 +151,13 @@ app.post("/api/render-internal", async (req, res) => {
     });
     const storagePath = buildStoragePath({ orgId, userId, inspectionId: inspectionSk });
     await uploadReport(storagePath, bytes);
+    const modelPath = await storeModel(storagePath, model);
     await recordReport({
       inspectionId: inspectionSk,
       orgId,
       userId,
       storagePath,
+      modelPath,
       sizeBytes: bytes.length,
       pageCount,
     });
@@ -184,7 +187,7 @@ async function generateInBackground({ jobId, inspectionId, orgId, userId, tzOffs
     // Step A+B: fetch the inspection + walkthrough form + report layout and
     // render the PDF (photos downscaled with sharp). Throws ReportError with a
     // user-meaningful message for no-template / not-found cases.
-    const { bytes, pageCount, skippedPhotos } = await renderInspectionReport({
+    const { bytes, pageCount, skippedPhotos, model } = await renderInspectionReport({
       inspectionSk: inspectionId,
       userId,
       orgSk: orgId,
@@ -195,6 +198,10 @@ async function generateInBackground({ jobId, inspectionId, orgId, userId, tzOffs
     const storagePath = buildStoragePath({ orgId, userId, inspectionId });
     await uploadReport(storagePath, bytes);
 
+    // Step C2: store the semantic model beside the PDF (best-effort — never
+    // fails the job; powers the HTML report).
+    const modelPath = await storeModel(storagePath, model);
+
     // Step D: time-limited signed URL (bucket is private — never public).
     const reportUrl = await signReport(storagePath);
 
@@ -204,6 +211,7 @@ async function generateInBackground({ jobId, inspectionId, orgId, userId, tzOffs
       orgId,
       userId,
       storagePath,
+      modelPath,
       sizeBytes: bytes.length,
       pageCount,
     });

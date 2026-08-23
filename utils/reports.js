@@ -279,6 +279,45 @@ export async function emailReportToClient(inspectionSk, { override = false } = {
   return { recipientCount: data.recipientCount };
 }
 
+// Fetch the interactive HTML report for an inspection (the report-view Edge
+// Function renders it from the stored ReportModel and signs photos fresh). The
+// result is loaded straight into a WebView — works on iOS AND Android.
+//
+// Resolves { html } when ready, or { unavailable: <reason> } for a report that
+// predates the model (no_model / no_report) so the caller can fall back to the
+// PDF. Throws with a presentable `message` only on real failures (offline,
+// forbidden, transport).
+export async function fetchReportHtml(inspectionSk) {
+  if (!inspectionSk) throw new Error("missing inspection");
+  if (!isOnline()) {
+    const err = new Error("You're offline — the interactive report needs a connection.");
+    err.presentable = true;
+    throw err;
+  }
+  const { data, error } = await supabase.functions.invoke("report-view", {
+    body: { inspectionSk },
+  });
+  if (error) {
+    let code = "";
+    try {
+      const parsed = await error.context?.json?.();
+      code = parsed?.error ?? "";
+    } catch (_) {}
+    logError(error, `utils/reports.fetchReportHtml sk=${inspectionSk} code="${code}"`);
+    const e = new Error(
+      code === "forbidden"
+        ? "You don't have access to this report."
+        : "Couldn't open the interactive report.",
+    );
+    e.presentable = true;
+    throw e;
+  }
+  if (data?.ok && data.html) return { html: data.html };
+  // no_report / no_model / model_unavailable / render_failed → no HTML yet; the
+  // caller falls back to the PDF (and can regenerate to enable the interactive view).
+  return { unavailable: data?.error ?? "unavailable" };
+}
+
 // Remove ONE inspection's cached PDF + clear its device-local pointer. Called
 // when an inspection is completed: a completed report lives in the cloud and is
 // re-fetched on demand, so keeping it cached just grows the app's footprint.

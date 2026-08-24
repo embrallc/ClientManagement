@@ -460,6 +460,10 @@ function RootLayout() {
           options={{ headerShown: false, animation: "slide_from_right" }}
         />
         <Stack.Screen
+          name="purpose"
+          options={{ headerShown: false, animation: "slide_from_right" }}
+        />
+        <Stack.Screen
           name="payments-settings"
           options={{ headerShown: false, animation: "slide_from_right" }}
         />

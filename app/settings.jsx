@@ -723,6 +723,36 @@ export default function SettingsScreen() {
           onReducePlan={handleReducePlan}
         />
 
+        <Text style={styles.sectionLabel}>OUR PURPOSE</Text>
+
+        <TouchableOpacity
+          style={styles.purposeRow}
+          onPress={() => router.push("/purpose")}
+          activeOpacity={0.7}
+        >
+          <View style={styles.purposeIcon}>
+            <MaterialCommunityIcons
+              name="hand-heart"
+              size={22}
+              color={theme.colors.primary}
+            />
+          </View>
+          <View style={styles.purposeText}>
+            <Text style={styles.purposeTitle}>
+              A Business with a Real Purpose
+            </Text>
+            <Text style={styles.purposeSub}>
+              40% of our profits go to children's health, education, and support
+              organizations. Tap to learn more.
+            </Text>
+          </View>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={22}
+            color={theme.colors.textSubtle}
+          />
+        </TouchableOpacity>
+
         <Text style={styles.sectionLabel}>SUPPORT</Text>
 
         <NavRow
@@ -1676,5 +1706,35 @@ const styles = StyleSheet.create({
   deleteText: {
     ...theme.typography.bodyBold,
     color: theme.colors.error,
+  },
+  purposeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.colors.cardBackground,
+    paddingHorizontal: theme.spacing.m,
+    paddingVertical: theme.spacing.m,
+    borderRadius: theme.layout.borderRadius.m,
+    marginBottom: theme.spacing.s,
+    ...theme.shadows.light,
+  },
+  purposeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.primaryGhost ?? "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: theme.spacing.m,
+  },
+  purposeText: {
+    flex: 1,
+    marginRight: theme.spacing.s,
+  },
+  purposeTitle: {
+    ...theme.typography.bodyBold,
+  },
+  purposeSub: {
+    ...theme.typography.label,
+    marginTop: 2,
   },
 });

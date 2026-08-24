@@ -167,7 +167,7 @@ serve(async (req) => {
   // Send mails the latest. None yet → tell the app to generate first.
   const { data: latest } = await admin
     .from("inspection_reports")
-    .select("storage_path")
+    .select("storage_path, model_path, generated_at")
     .eq("inspection_sk", inspectionSk)
     .order("generated_at", { ascending: false })
     .limit(1)
@@ -187,18 +187,67 @@ serve(async (req) => {
 
   const who = insp.full_name || "there";
   const addr = [insp.address_line1, insp.city, insp.state].filter(Boolean).join(", ");
+
+  // Hosted client viewer (Phase 2): when the latest report has a rendered model,
+  // create/refresh a share (one per inspection) so the client can open the
+  // interactive report online behind email-2FA. Best-effort — a failure here
+  // never blocks the PDF email, and reports predating the model just skip it.
+  let onlineUrl: string | null = null;
+  if (latest?.model_path) {
+    try {
+      const { data: shareRow } = await admin
+        .from("report_shares")
+        .upsert(
+          {
+            inspection_sk: inspectionSk,
+            org_sk: insp.org_sk ?? null,
+            model_path: latest.model_path,
+            report_generated_at: latest.generated_at ?? null,
+            property_label: addr || null,
+            authorized_emails: recipients, // already lowercased + de-duped
+            created_by: userId,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "inspection_sk" },
+        )
+        .select("share_token")
+        .single();
+      if (shareRow?.share_token) {
+        // Staging shares live in the staging project; tag the link so the shared
+        // getzanbi.com viewer talks to the right backend (prod needs no tag).
+        const staging = (Deno.env.get("SUPABASE_URL") ?? "").includes(
+          "agdnsnrbwqavqrdngpmh",
+        );
+        onlineUrl =
+          `https://getzanbi.com/report?token=${shareRow.share_token}` +
+          (staging ? "&env=staging" : "");
+      }
+    } catch (e) {
+      console.error(`${TAG} share_upsert_failed`, (e as Error)?.message);
+    }
+  }
+
   const subject = `Your inspection report${addr ? ` — ${addr}` : ""}`;
   const text =
     `Hi ${who},\n\n` +
-    `Your inspection report is ready. You can view and download it here:\n${link}\n\n` +
-    `This link will stop working after 30 days. Thank you!`;
+    `Your inspection report is ready. You can view and download the PDF here:\n${link}\n\n` +
+    (onlineUrl
+      ? `Prefer an interactive version? View your report online — you'll confirm your ` +
+        `email with a quick code for privacy:\n${onlineUrl}\n\n`
+      : "") +
+    `The download link will stop working after 30 days. Thank you!`;
   const html =
     `<div style="font-family:-apple-system,system-ui,Segoe UI,sans-serif;color:#1c1c1e;line-height:1.5">` +
     `<p>Hi ${who},</p>` +
     `<p>Your inspection report${addr ? ` for <strong>${addr}</strong>` : ""} is ready.</p>` +
-    `<p><a href="${link}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:8px">View your report</a></p>` +
-    `<p style="color:#888;font-size:13px">Or paste this link into your browser:<br>${link}</p>` +
-    `<p style="color:#888;font-size:13px">This link expires in 30 days.</p>` +
+    `<p><a href="${link}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:8px">View report (PDF)</a></p>` +
+    (onlineUrl
+      ? `<p><a href="${onlineUrl}" style="display:inline-block;background:#5b5bd6;color:#fff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:8px">View report online</a></p>` +
+        `<p style="color:#888;font-size:13px">The online report is interactive and mobile-friendly. ` +
+        `For your privacy, you'll confirm your email with a quick code.</p>`
+      : "") +
+    `<p style="color:#888;font-size:13px">Or paste the PDF link into your browser:<br>${link}</p>` +
+    `<p style="color:#888;font-size:13px">The download link expires in 30 days.</p>` +
     `</div>`;
 
   const sent = await sendEmail({ to: recipients, subject, html, text });

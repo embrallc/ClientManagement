@@ -65,7 +65,7 @@ export default function PurposeScreen() {
 
         {/* Pledge */}
         <View style={styles.card}>
-          <Text style={styles.pledgeNumber}>40%</Text>
+          <Text style={styles.pledgeNumber}>30%</Text>
           <Text style={styles.pledgeText}>
             of our profits go to organizations supporting children's{" "}
             <Text style={styles.pledgeStrong}>health</Text>,{" "}
@@ -81,11 +81,11 @@ export default function PurposeScreen() {
           <View style={styles.splitLegend}>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, styles.dotGiven]} />
-              <Text style={styles.legendText}>40% to children's causes</Text>
+              <Text style={styles.legendText}>30% to children's causes</Text>
             </View>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, styles.dotKept]} />
-              <Text style={styles.legendText}>60% to build Zanbi</Text>
+              <Text style={styles.legendText}>70% to build Zanbi</Text>
             </View>
           </View>
         </View>
@@ -112,8 +112,8 @@ export default function PurposeScreen() {
         <View style={styles.closingCard}>
           <Text style={styles.closingText}>
             We don't do this for recognition — we do it because it's right. We
-            keep 60% of our profits to build and run Zanbi, and give the other
-            40% to help children. By choosing Zanbi, you help make it possible.
+            keep 70% of our profits to build and run Zanbi, and give the other
+            30% to help children. By choosing Zanbi, you help make it possible.
           </Text>
         </View>
 
@@ -201,11 +201,11 @@ const styles = StyleSheet.create({
     marginTop: theme?.spacing?.m,
   },
   splitGiven: {
-    flex: 40,
+    flex: 30,
     backgroundColor: theme?.colors?.primary,
   },
   splitKept: {
-    flex: 60,
+    flex: 70,
     backgroundColor: theme?.colors?.input,
   },
   splitLegend: {

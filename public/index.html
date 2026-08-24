@@ -97,12 +97,17 @@
   header.site{position:sticky;top:0;z-index:50;background:rgba(244,245,253,.82);
     backdrop-filter:saturate(180%) blur(12px);border-bottom:1px solid rgba(231,231,242,.9);}
   .nav{display:flex;align-items:center;justify-content:space-between;height:64px;}
-  .brand{display:inline-flex;align-items:center;gap:10px;font-weight:800;font-size:1.28rem;color:var(--ink);letter-spacing:-.01em;}
+  .brand{display:inline-flex;align-items:center;gap:10px;font-weight:800;font-size:1.28rem;color:var(--ink);letter-spacing:-.01em;min-width:0;}
   .brand svg{display:block;flex:0 0 auto;}
-  .brand-lockup{display:flex;flex-direction:column;line-height:1.04;}
+  .brand-lockup{display:flex;flex-direction:column;line-height:1.04;min-width:0;}
   .brand-name{font-weight:800;font-size:1.28rem;letter-spacing:-.01em;}
-  .brand-tag{font-size:.62rem;font-weight:700;letter-spacing:.02em;color:var(--brand);margin-top:1px;white-space:nowrap;text-transform:none;}
-  @media(max-width:600px){.brand-tag{display:none;}}
+  .brand-tag{font-size:.62rem;font-weight:700;letter-spacing:.02em;color:var(--brand);margin-top:1px;white-space:nowrap;text-transform:none;overflow:hidden;text-overflow:ellipsis;}
+  @media(max-width:600px){
+    .brand-tag{font-size:.55rem;letter-spacing:.01em;}
+    .brand svg{width:26px;height:26px;}
+    .nav{gap:8px;}
+    .nav .btn{padding:9px 13px;font-size:.85rem;}
+  }
   .nav .btn{padding:10px 18px;font-size:.95rem;}
 
   /* ---------- hero ---------- */
@@ -532,10 +537,10 @@
     <div class="head">
       <p class="eyebrow">Our purpose</p>
       <h2>A business with a real purpose.</h2>
-      <p class="lead">We keep 60% of our profits to build and run Zanbi — and give the other <b>40%</b> to organizations supporting children's health, education, and well-being. When you choose Zanbi, you help make it possible.</p>
+      <p class="lead">We keep 70% of our profits to build and run Zanbi — and give the other <b>30%</b> to organizations supporting children's health, education, and well-being. When you choose Zanbi, you help make it possible.</p>
     </div>
     <div class="give-pledge reveal">
-      <div class="give-num">40%</div>
+      <div class="give-num">30%</div>
       <div class="give-num-l">of our profits go to children's causes</div>
     </div>
     <div class="give-grid">

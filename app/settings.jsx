@@ -742,7 +742,7 @@ export default function SettingsScreen() {
               A Business with a Real Purpose
             </Text>
             <Text style={styles.purposeSub}>
-              40% of our profits go to children's health, education, and support
+              30% of our profits go to children's health, education, and support
               organizations. Tap to learn more.
             </Text>
           </View>

@@ -98,7 +98,11 @@
     backdrop-filter:saturate(180%) blur(12px);border-bottom:1px solid rgba(231,231,242,.9);}
   .nav{display:flex;align-items:center;justify-content:space-between;height:64px;}
   .brand{display:inline-flex;align-items:center;gap:10px;font-weight:800;font-size:1.28rem;color:var(--ink);letter-spacing:-.01em;}
-  .brand svg{display:block;}
+  .brand svg{display:block;flex:0 0 auto;}
+  .brand-lockup{display:flex;flex-direction:column;line-height:1.04;}
+  .brand-name{font-weight:800;font-size:1.28rem;letter-spacing:-.01em;}
+  .brand-tag{font-size:.62rem;font-weight:700;letter-spacing:.02em;color:var(--brand);margin-top:1px;white-space:nowrap;text-transform:none;}
+  @media(max-width:600px){.brand-tag{display:none;}}
   .nav .btn{padding:10px 18px;font-size:.95rem;}
 
   /* ---------- hero ---------- */
@@ -239,8 +243,19 @@
   .finalcta .wait-note--err{color:#ffd9d1;}
   .finalcta .btn-primary[disabled]{opacity:.7;cursor:default;}
 
+  /* ---------- our purpose ---------- */
+  .give-pledge{text-align:center;margin:0 auto 40px;}
+  .give-num{font-size:clamp(3rem,9vw,5rem);font-weight:800;letter-spacing:-.03em;color:var(--brand);line-height:1;}
+  .give-num-l{color:var(--ink-soft);font-weight:600;margin-top:6px;font-size:1.05rem;}
+  .give-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  .give-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:24px;box-shadow:var(--shadow-s);text-align:center;}
+  .give-ic{font-size:1.9rem;margin-bottom:10px;}
+  .give-card h3{font-size:1.08rem;font-weight:800;}
+  .give-card p{margin:6px 0 0;color:var(--ink-soft);font-size:.96rem;}
+
   /* ---------- footer ---------- */
   footer.site{background:#15151f;color:#b8b8cc;padding:52px 0 34px;}
+  .foot-slogan{color:var(--brand-tint);font-weight:700;font-size:.95rem;margin-bottom:6px;}
   .foot-grid{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap;}
   .foot-brand{display:inline-flex;align-items:center;gap:10px;color:#fff;font-weight:800;font-size:1.2rem;margin-bottom:10px;}
   .foot-links{display:flex;gap:26px;flex-wrap:wrap;}
@@ -262,6 +277,7 @@
     .hero-phone{margin-top:30px;}
     .valuestrip{grid-template-columns:1fr;}
     .loop{grid-template-columns:1fr;}
+    .give-grid{grid-template-columns:1fr;}
     .ai-grid{gap:14px;}
     section{padding:56px 0;}
     .hide-sm{display:none;}
@@ -284,7 +300,10 @@
         <path d="M60 8 C82 8 100 26 100 48 C100 75 71 92 60 113 C49 92 20 75 20 48 C20 26 38 8 60 8 Z" fill="#5b5bd6"/>
         <polyline points="43,35 77,35 43,63 77,63" fill="none" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      Zanbi
+      <span class="brand-lockup">
+        <span class="brand-name">Zanbi</span>
+        <span class="brand-tag">A business with a real purpose</span>
+      </span>
     </a>
     <div class="nav-actions">
       <a class="btn btn-ghost hide-sm" href="builder/">Try the builder</a>
@@ -507,6 +526,26 @@
   </div>
 </section>
 
+<!-- ============================ OUR PURPOSE ============================ -->
+<section class="band-lav" id="purpose">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Our purpose</p>
+      <h2>A business with a real purpose.</h2>
+      <p class="lead">We keep 60% of our profits to build and run Zanbi — and give the other <b>40%</b> to organizations supporting children's health, education, and well-being. When you choose Zanbi, you help make it possible.</p>
+    </div>
+    <div class="give-pledge reveal">
+      <div class="give-num">40%</div>
+      <div class="give-num-l">of our profits go to children's causes</div>
+    </div>
+    <div class="give-grid">
+      <div class="give-card reveal"><div class="give-ic" aria-hidden="true">🩺</div><h3>Children's health</h3><p>Support for kids facing medical challenges and complex health needs.</p></div>
+      <div class="give-card reveal"><div class="give-ic" aria-hidden="true">🎁</div><h3>A brighter holiday</h3><p>Gifts and joy for children in families going through hard times.</p></div>
+      <div class="give-card reveal"><div class="give-ic" aria-hidden="true">🎓</div><h3>Learning for every child</h3><p>Help for kids with special education needs to learn and thrive.</p></div>
+    </div>
+  </div>
+</section>
+
 <!-- ============================ FINAL CTA / WAITLIST ============================ -->
 <section class="finalcta" id="waitlist">
   <div class="wrap">
@@ -535,9 +574,11 @@
           </svg>
           Zanbi
         </div>
+        <div class="foot-slogan">A business with a real purpose.</div>
         <div style="max-width:32ch;font-size:.92rem;">The inspection business, in your pocket. Built for independent inspectors.</div>
       </div>
       <div class="foot-links">
+        <a href="#purpose">Our Purpose</a>
         <a href="/privacy.html">Privacy</a>
         <a href="/terms.html">Terms</a>
         <a href="/sms-terms.html">SMS Terms</a>

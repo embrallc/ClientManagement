@@ -3,11 +3,15 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Email confirmed · Zanbi</title>
-<meta name="description" content="Your Zanbi account email has been confirmed." />
+<title>Confirm email · Zanbi</title>
+<meta name="description" content="Confirm your Zanbi account email." />
+<!-- Keep this page out of search results. It does nothing without the one-time,
+     expiring confirmation token that Supabase emails to the account owner; this
+     is discoverability hygiene, not the security boundary. -->
+<meta name="robots" content="noindex, nofollow" />
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <style>
-  :root{--ink:#1c1c2e;--muted:#5b5b6b;--line:#e4e4ee;--brand:#5b5bd6;--soft:#f6f6fb;--ok:#22a06b;}
+  :root{--ink:#1c1c2e;--muted:#5b5b6b;--line:#e4e4ee;--brand:#5b5bd6;--soft:#f6f6fb;--ok:#22a06b;--err:#d64545;}
   *{box-sizing:border-box;}
   html,body{height:100%;}
   body{
@@ -15,32 +19,82 @@
     color:var(--ink);background:linear-gradient(180deg,#fff 0%,var(--soft) 100%);
     display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;
   }
-  .card{max-width:460px;text-align:center;}
-  .check{
+  .card{width:100%;max-width:460px;text-align:center;}
+  .icon{
     width:76px;height:76px;border-radius:50%;margin:0 auto 22px;
-    background:rgba(34,160,107,.10);display:flex;align-items:center;justify-content:center;
+    display:flex;align-items:center;justify-content:center;
   }
-  .check svg{width:38px;height:38px;stroke:var(--ok);stroke-width:3;fill:none;
-    stroke-linecap:round;stroke-linejoin:round;}
+  .icon.brand-bg{background:rgba(91,91,214,.10);}
+  .icon.ok-bg{background:rgba(34,160,107,.10);}
+  .icon svg{width:38px;height:38px;stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .icon.brand-bg svg{stroke:var(--brand);}
+  .icon.ok-bg svg{stroke:var(--ok);}
   h1{font-size:1.7rem;font-weight:800;letter-spacing:-.02em;margin:0 0 10px;}
   .tag{font-size:1.05rem;color:var(--muted);margin:0 0 6px;line-height:1.55;}
   .strong{color:var(--ink);font-weight:600;}
+  button{
+    width:100%;margin-top:22px;padding:14px;border:0;border-radius:12px;cursor:pointer;
+    background:var(--brand);color:#fff;font-size:1rem;font-weight:700;letter-spacing:.01em;
+  }
+  button:disabled{opacity:.6;cursor:default;}
+  button:focus-visible{outline:3px solid rgba(91,91,214,.45);outline-offset:2px;}
+  .msg{margin-top:14px;font-size:.9rem;line-height:1.5;min-height:1.2em;}
+  .msg.err{color:var(--err);}
   .brand{margin-top:34px;display:flex;align-items:center;justify-content:center;gap:10px;
     font-size:1.4rem;font-weight:800;letter-spacing:-.02em;color:var(--brand);}
   .foot{margin-top:8px;color:var(--muted);font-size:.82rem;}
+  [hidden]{display:none !important;}
 </style>
 </head>
 <body>
   <div class="card">
-    <div class="check" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg>
+    <!-- 1) Working state: routing / verifying -->
+    <div id="loading">
+      <p class="tag">Loading…</p>
     </div>
-    <h1>Email confirmed</h1>
-    <p class="tag">
-      Your account is verified. <span class="strong">Open the Zanbi app and sign in</span>
-      to get started.
-    </p>
-    <p class="tag">You can close this tab.</p>
+
+    <!-- 2) Confirm: real person taps to consume the one-time token.
+         Email scanners prefetch this page but don't click, so the token
+         survives until the account owner presses the button. -->
+    <div id="confirm-state" hidden>
+      <div class="icon brand-bg" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+      </div>
+      <h1>Confirm your email</h1>
+      <p class="tag">You're one tap away from finishing your Zanbi account.</p>
+      <button id="confirm-btn" type="button">Confirm my email address</button>
+      <p id="confirm-msg" class="msg err" role="alert" aria-live="polite"></p>
+    </div>
+
+    <!-- 3) Success -->
+    <div id="success-state" hidden>
+      <div class="icon ok-bg" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <h1>Email confirmed</h1>
+      <p class="tag">Your account is verified. <span class="strong">Open the Zanbi app and sign in</span> to get started.</p>
+      <p class="tag">You can close this tab.</p>
+    </div>
+
+    <!-- 4) Invalid / expired / already-used link -->
+    <div id="invalid-state" hidden>
+      <div class="icon brand-bg" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/></svg>
+      </div>
+      <h1>Link expired</h1>
+      <p class="tag">This confirmation link is invalid or has already been used.</p>
+      <p class="tag">If you've already confirmed, just <span class="strong">open the Zanbi app and sign in</span>. If you still can't sign in, request a new confirmation link from the app.</p>
+    </div>
+
+    <!-- 5) No token (direct visit / plain redirect) -->
+    <div id="info-state" hidden>
+      <div class="icon brand-bg" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+      </div>
+      <h1>Almost there</h1>
+      <p class="tag">To finish setting up your account, <span class="strong">open the Zanbi app and sign in</span>. If your email isn't confirmed yet, use the confirmation link we emailed you.</p>
+    </div>
+
     <div class="brand">
       <svg viewBox="0 0 120 120" width="30" height="30" aria-hidden="true">
         <path d="M60 8 C82 8 100 26 100 48 C100 75 71 92 60 113 C49 92 20 75 20 48 C20 26 38 8 60 8 Z" fill="#5b5bd6"/>
@@ -50,5 +104,104 @@
     </div>
     <p class="foot">A product of Embra LLC</p>
   </div>
+
+<script>
+(function () {
+  // Per-project Supabase URL + its PUBLISHABLE key (sb_publishable_…). These are
+  // safe to ship client-side by design — the same publishable key the app bundle
+  // and the marketing site already use. Verifying an email still requires the
+  // one-time token_hash below, which only the emailed link carries.
+  var ENVS = {
+    prod:    { url: "https://wwspvjsnkkgdziixbeei.supabase.co", key: "sb_publishable_adQsJyQXHYmyA3t1fuLRUg_ID_f_DM6" },
+    staging: { url: "https://agdnsnrbwqavqrdngpmh.supabase.co", key: "sb_publishable_eyzDkbY44KFp5NzXGw3_Dg__8KbW0eN" }
+  };
+
+  var el = function (id) { return document.getElementById(id); };
+  function show(stateId) {
+    ["loading", "confirm-state", "success-state", "invalid-state", "info-state"].forEach(function (id) {
+      el(id).hidden = id !== stateId;
+    });
+  }
+
+  var query = new URLSearchParams(location.search || "");
+  var hash  = new URLSearchParams((location.hash || "").replace(/^#/, ""));
+
+  var env = query.get("env") === "staging" ? "staging" : "prod";
+  var cfg = ENVS[env];
+
+  // Newer flow: Supabase emails a token_hash + type in the query string; we POST
+  // it to /verify from here (only on the button press).
+  var tokenHash = query.get("token_hash");
+  var type = query.get("type") || "email";
+
+  // Older flow: the server-side {{ .ConfirmationURL }} link already verified and
+  // redirected here with the session in the URL hash, or an error if it failed.
+  var accessToken = hash.get("access_token");
+  var hashError   = hash.get("error_description") || hash.get("error");
+
+  // Strip anything sensitive from the address bar / history once captured.
+  try { history.replaceState(null, "", location.pathname); } catch (e) {}
+
+  // Route.
+  if (accessToken && !hashError) {           // old flow already succeeded
+    show("success-state");
+    return;
+  }
+  if (hashError) {                           // old flow failed (expired/consumed)
+    show("invalid-state");
+    return;
+  }
+  if (!tokenHash) {                          // direct visit / plain redirect
+    show("info-state");
+    return;
+  }
+
+  // token_hash present → wait for a real tap before consuming it.
+  show("confirm-state");
+  el("confirm-btn").focus();
+
+  el("confirm-btn").addEventListener("click", function () {
+    var btn = el("confirm-btn");
+    var msg = el("confirm-msg");
+    btn.disabled = true;
+    btn.textContent = "Confirming…";
+    msg.textContent = "";
+
+    fetch(cfg.url + "/auth/v1/verify", {
+      method: "POST",
+      headers: {
+        "apikey": cfg.key,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ type: type, token_hash: tokenHash, gotrue_meta_security: {} })
+    })
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          return { ok: res.ok, status: res.status, body: body };
+        });
+      })
+      .then(function (r) {
+        if (r.ok) { show("success-state"); return; }
+        // 401/403/410 or an otp_expired code → the token is spent or expired.
+        var code = (r.body.error_code || r.body.code || "") + "";
+        if (r.status === 401 || r.status === 403 || r.status === 410 ||
+            /expired|invalid|not_found/i.test(code)) {
+          show("invalid-state");
+          return;
+        }
+        btn.disabled = false;
+        btn.textContent = "Confirm my email address";
+        msg.textContent =
+          r.body.msg || r.body.message || r.body.error_description || r.body.error ||
+          "Couldn't confirm your email. Please try again.";
+      })
+      .catch(function () {
+        btn.disabled = false;
+        btn.textContent = "Confirm my email address";
+        msg.textContent = "Network error — check your connection and try again.";
+      });
+  });
+})();
+</script>
 </body>
 </html>

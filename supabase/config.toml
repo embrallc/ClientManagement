@@ -458,6 +458,21 @@ verify_jwt = true
 # bearer that the gateway validates; keep JWT verification on.
 verify_jwt = true
 
+[functions.report-html]
+# Hosted client report viewer (step 3). Authorized by an opaque report session
+# token (post email-2FA), NOT a Supabase JWT — the browser holds no JWT.
+verify_jwt = false
+
+[functions.report-otp-request]
+# Hosted client report viewer (step 1). Public endpoint; emails a 6-digit code
+# to an authorized address. Self-authorizes (share + authorized-email list).
+verify_jwt = false
+
+[functions.report-otp-verify]
+# Hosted client report viewer (step 2). Public endpoint; checks the code and
+# mints a report session token. Self-authorizes.
+verify_jwt = false
+
 [functions.report-view]
 # Device opens the report viewer; the owner's JWT authorizes it. Returns the
 # interactive HTML report (rendered from the stored ReportModel).

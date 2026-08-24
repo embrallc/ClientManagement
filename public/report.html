@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Your inspection report · Zanbi</title>
+<meta name="description" content="View your Zanbi inspection report securely." />
+<!-- The report itself is gated by a one-time email code; keep this page out of
+     search results as basic hygiene. -->
+<meta name="robots" content="noindex, nofollow" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<style>
+  :root{--ink:#1c1c2e;--muted:#5b5b6b;--line:#e4e4ee;--brand:#5b5bd6;--soft:#f6f6fb;--ok:#22a06b;--err:#d64545;}
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;font-family:-apple-system,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);background:linear-gradient(180deg,#fff 0%,var(--soft) 100%);
+    display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;
+  }
+  /* When the report is showing, the iframe fills the screen and the gate card is gone. */
+  body.report-mode{display:block;padding:0;background:#fff;}
+  .card{width:100%;max-width:440px;text-align:center;}
+  .icon{
+    width:72px;height:72px;border-radius:50%;margin:0 auto 20px;
+    display:flex;align-items:center;justify-content:center;background:rgba(91,91,214,.10);
+  }
+  .icon svg{width:36px;height:36px;stroke:var(--brand);stroke-width:3;fill:none;
+    stroke-linecap:round;stroke-linejoin:round;}
+  h1{font-size:1.55rem;font-weight:800;letter-spacing:-.02em;margin:0 0 10px;}
+  .tag{font-size:1.02rem;color:var(--muted);margin:0 0 6px;line-height:1.55;}
+  .strong{color:var(--ink);font-weight:600;}
+  form{margin-top:20px;text-align:left;}
+  label{display:block;font-size:.82rem;font-weight:600;color:var(--muted);margin:14px 0 6px;}
+  input[type=email],input[type=text]{
+    width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:12px;
+    font-size:1rem;color:var(--ink);background:#fff;outline:none;
+  }
+  input:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(91,91,214,.12);}
+  input#code{letter-spacing:8px;text-align:center;font-size:1.4rem;font-weight:700;}
+  button{
+    width:100%;margin-top:20px;padding:14px;border:0;border-radius:12px;cursor:pointer;
+    background:var(--brand);color:#fff;font-size:1rem;font-weight:700;letter-spacing:.01em;
+  }
+  button:disabled{opacity:.6;cursor:default;}
+  button:focus-visible{outline:3px solid rgba(91,91,214,.45);outline-offset:2px;}
+  .msg{margin-top:14px;font-size:.9rem;line-height:1.5;min-height:1.2em;}
+  .msg.err{color:var(--err);}
+  .msg.hint{color:var(--muted);}
+  .links{margin-top:16px;display:flex;flex-direction:column;gap:8px;font-size:.88rem;}
+  .linkbtn{background:none;border:0;color:var(--brand);font-weight:600;cursor:pointer;
+    padding:0;margin:0;width:auto;font-size:.88rem;}
+  .linkbtn:disabled{color:var(--muted);}
+  .brand{margin-top:30px;display:flex;align-items:center;justify-content:center;gap:10px;
+    font-size:1.3rem;font-weight:800;letter-spacing:-.02em;color:var(--brand);}
+  .foot{margin-top:8px;color:var(--muted);font-size:.8rem;}
+  #report-frame{display:none;border:0;width:100%;height:100vh;height:100dvh;background:#fff;}
+  body.report-mode #report-frame{display:block;}
+  body.report-mode .card{display:none;}
+  [hidden]{display:none !important;}
+</style>
+</head>
+<body>
+  <div class="card">
+    <!-- 0) Working -->
+    <div id="loading">
+      <p class="tag">Loading…</p>
+    </div>
+
+    <!-- 1) Ask for email -->
+    <div id="email-state" hidden>
+      <div class="icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+      </div>
+      <h1>View your inspection report</h1>
+      <p class="tag">For your privacy, we'll email a one-time code to confirm it's you.</p>
+      <form id="email-form" novalidate>
+        <label for="email">Your email address</label>
+        <input id="email" type="email" autocomplete="email" inputmode="email"
+               placeholder="you@example.com" />
+        <p id="email-msg" class="msg err" role="alert" aria-live="polite"></p>
+        <button id="email-btn" type="submit">Send me a code</button>
+      </form>
+    </div>
+
+    <!-- 2) Enter the code -->
+    <div id="code-state" hidden>
+      <div class="icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      </div>
+      <h1>Enter your code</h1>
+      <p class="tag">If <span id="code-email" class="strong"></span> is authorized for this
+        report, we've sent it a 6-digit code. It expires in 10 minutes.</p>
+      <form id="code-form" novalidate>
+        <label for="code">6-digit code</label>
+        <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+               maxlength="6" placeholder="000000" />
+        <p id="code-msg" class="msg err" role="alert" aria-live="polite"></p>
+        <button id="code-btn" type="submit">View report</button>
+      </form>
+      <div class="links">
+        <button id="resend-btn" class="linkbtn" type="button">Resend code</button>
+        <button id="restart-btn" class="linkbtn" type="button">Use a different email</button>
+      </div>
+    </div>
+
+    <!-- 3) Invalid / expired link -->
+    <div id="invalid-state" hidden>
+      <div class="icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/></svg>
+      </div>
+      <h1>Report unavailable</h1>
+      <p class="tag" id="invalid-msg">This report link is invalid or has expired.</p>
+      <p class="tag">If you were expecting a report, please contact your inspector for a new link.</p>
+    </div>
+
+    <div class="brand">
+      <svg viewBox="0 0 120 120" width="28" height="28" aria-hidden="true">
+        <path d="M60 8 C82 8 100 26 100 48 C100 75 71 92 60 113 C49 92 20 75 20 48 C20 26 38 8 60 8 Z" fill="#5b5bd6"/>
+        <polyline points="43,35 77,35 43,63 77,63" fill="none" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>Zanbi</span>
+    </div>
+    <p class="foot">A product of Embra LLC</p>
+  </div>
+
+  <iframe id="report-frame" title="Inspection report" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe>
+
+<script>
+(function () {
+  // Per-project Supabase URL + PUBLISHABLE key (sb_publishable_…, public-safe).
+  // All access to actual report data is gated by the email code + session token.
+  var ENVS = {
+    prod:    { url: "https://wwspvjsnkkgdziixbeei.supabase.co", key: "sb_publishable_adQsJyQXHYmyA3t1fuLRUg_ID_f_DM6" },
+    staging: { url: "https://agdnsnrbwqavqrdngpmh.supabase.co", key: "sb_publishable_eyzDkbY44KFp5NzXGw3_Dg__8KbW0eN" }
+  };
+
+  var el = function (id) { return document.getElementById(id); };
+  function show(stateId) {
+    ["loading", "email-state", "code-state", "invalid-state"].forEach(function (id) {
+      el(id).hidden = id !== stateId;
+    });
+  }
+
+  var query = new URLSearchParams(location.search || "");
+  var shareToken = query.get("token") || "";
+  var env = query.get("env") === "staging" ? "staging" : "prod";
+  var cfg = ENVS[env];
+  var email = "";
+  var sessionToken = "";
+  var SS_KEY = "zr_session_" + shareToken;
+
+  function ef(name, payload) {
+    return fetch(cfg.url + "/functions/v1/" + name, {
+      method: "POST",
+      headers: { "apikey": cfg.key, "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (body) {
+        return { status: r.status, body: body || {} };
+      });
+    });
+  }
+
+  function renderReport(html) {
+    el("report-frame").srcdoc = html;
+    document.body.classList.add("report-mode");
+  }
+
+  // Fetch + render the report with the current session token. Returns a promise
+  // resolving true on success, false if the session is gone/expired.
+  function loadReport() {
+    return ef("report-html", { shareToken: shareToken, sessionToken: sessionToken })
+      .then(function (r) {
+        if (r.body && r.body.ok && r.body.html) { renderReport(r.body.html); return true; }
+        return false;
+      })
+      .catch(function () { return false; });
+  }
+
+  if (!shareToken) { show("invalid-state"); return; }
+
+  // ── Email step ─────────────────────────────────────────────────────────────
+  function requestCode() {
+    return ef("report-otp-request", { shareToken: shareToken, email: email });
+  }
+
+  el("email-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var val = (el("email").value || "").trim().toLowerCase();
+    var msg = el("email-msg");
+    msg.textContent = "";
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(val)) {
+      msg.textContent = "Please enter a valid email address."; return;
+    }
+    email = val;
+    var btn = el("email-btn");
+    btn.disabled = true; btn.textContent = "Sending…";
+    requestCode().then(function () {
+      // Uniform: always advance to the code screen regardless of authorization.
+      btn.disabled = false; btn.textContent = "Send me a code";
+      el("code-email").textContent = email;
+      show("code-state");
+      el("code").focus();
+    }).catch(function () {
+      btn.disabled = false; btn.textContent = "Send me a code";
+      msg.textContent = "Network error — please try again.";
+    });
+  });
+
+  // ── Code step ──────────────────────────────────────────────────────────────
+  el("code-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var code = (el("code").value || "").trim();
+    var msg = el("code-msg");
+    msg.textContent = "";
+    if (!/^\d{6}$/.test(code)) { msg.textContent = "Enter the 6-digit code."; return; }
+
+    var btn = el("code-btn");
+    btn.disabled = true; btn.textContent = "Verifying…";
+    ef("report-otp-verify", { shareToken: shareToken, email: email, code: code })
+      .then(function (r) {
+        if (r.body && r.body.ok && r.body.sessionToken) {
+          sessionToken = r.body.sessionToken;
+          try { sessionStorage.setItem(SS_KEY, sessionToken); } catch (_) {}
+          btn.textContent = "Opening…";
+          return loadReport().then(function (okay) {
+            if (!okay) {
+              btn.disabled = false; btn.textContent = "View report";
+              msg.textContent = "Couldn't open the report. Please request a new code.";
+            }
+          });
+        }
+        btn.disabled = false; btn.textContent = "View report";
+        var err = (r.body && r.body.error) || "";
+        if (err === "too_many_attempts") msg.textContent = "Too many attempts. Request a new code.";
+        else if (err === "code_expired") msg.textContent = "That code has expired. Request a new one.";
+        else if (err === "invalid_or_expired") msg.textContent = "This report link is no longer available.";
+        else msg.textContent = "That code isn't right. Please check and try again.";
+      })
+      .catch(function () {
+        btn.disabled = false; btn.textContent = "View report";
+        msg.textContent = "Network error — please try again.";
+      });
+  });
+
+  el("resend-btn").addEventListener("click", function () {
+    var b = el("resend-btn");
+    b.disabled = true; b.textContent = "Sending…";
+    requestCode().finally(function () {
+      setTimeout(function () { b.disabled = false; b.textContent = "Resend code"; }, 1200);
+      el("code-msg").className = "msg hint";
+      el("code-msg").textContent = "If authorized, a new code is on its way.";
+    });
+  });
+
+  el("restart-btn").addEventListener("click", function () {
+    email = ""; el("email").value = ""; el("code").value = "";
+    el("email-msg").textContent = ""; el("code-msg").textContent = "";
+    show("email-state"); el("email").focus();
+  });
+
+  // ── Boot: resume an in-tab session if one is still valid, else ask for email ─
+  try { sessionToken = sessionStorage.getItem(SS_KEY) || ""; } catch (_) {}
+  if (sessionToken) {
+    loadReport().then(function (okay) {
+      if (!okay) {
+        try { sessionStorage.removeItem(SS_KEY); } catch (_) {}
+        sessionToken = "";
+        show("email-state"); el("email").focus();
+      }
+    });
+  } else {
+    show("email-state");
+    el("email").focus();
+  }
+})();
+</script>
+</body>
+</html>

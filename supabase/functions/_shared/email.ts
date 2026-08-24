@@ -86,6 +86,38 @@ export function buildInvoiceEmail(opts: {
   return { subject, html, text };
 }
 
+// One-time passcode email for the hosted client report viewer (email-2FA). The
+// recipient enters this code on the report page to unlock the interactive report.
+// The code also appears in the subject so it's glanceable from a notification.
+export function buildOtpEmail(opts: {
+  code: string;
+  propertyLabel?: string | null;
+  ttlMinutes?: number;
+}): { subject: string; html: string; text: string } {
+  const addr = (opts.propertyLabel || "").trim();
+  const ttl = opts.ttlMinutes ?? 10;
+  const subject = `Your report access code: ${opts.code}`;
+  const text =
+    `Your Zanbi inspection report access code is ${opts.code}.\n\n` +
+    `Enter it on the report page to view your report${addr ? ` for ${addr}` : ""}. ` +
+    `This code expires in ${ttl} minutes.\n\n` +
+    `If you didn't request this, you can safely ignore this email.`;
+  const html =
+    `<div style="font-family:-apple-system,system-ui,Segoe UI,sans-serif;color:#1c1c2e;line-height:1.5;max-width:460px">` +
+    `<p>Here is your access code to view your inspection report${
+      addr ? ` for <strong>${addr}</strong>` : ""
+    }:</p>` +
+    `<p style="font-size:34px;font-weight:800;letter-spacing:8px;background:#f6f6fb;` +
+    `border:1px solid #e4e4ee;border-radius:12px;padding:16px 0;text-align:center;` +
+    `color:#1c1c2e;margin:18px 0">${opts.code}</p>` +
+    `<p style="color:#5b5b6b;font-size:14px">Enter this code on the report page. ` +
+    `It expires in ${ttl} minutes.</p>` +
+    `<p style="color:#888;font-size:13px">If you didn't request this, you can safely ` +
+    `ignore this email.</p>` +
+    `</div>`;
+  return { subject, html, text };
+}
+
 export async function sendEmail({
   to,
   subject,

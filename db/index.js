@@ -89,6 +89,8 @@ export function initializeDatabase(userId) {
       ReportState TEXT NOT NULL DEFAULT 'pending',
       Paid INTEGER NOT NULL DEFAULT 0,
       ReportRecipients TEXT NOT NULL DEFAULT '[]',
+      ReportPdf INTEGER NOT NULL DEFAULT 1,
+      ReportOnline INTEGER NOT NULL DEFAULT 1,
       LastReportPath TEXT,
       LastReportAt INTEGER,
       CalendarEventId TEXT,
@@ -294,6 +296,20 @@ export function initializeDatabase(userId) {
   try {
     _db.execSync(
       `ALTER TABLE Inspections ADD COLUMN ReportRecipients TEXT NOT NULL DEFAULT '[]'`,
+    );
+  } catch (_) {}
+  // Report Types (synced, device-editable). Which artifacts the CLIENT receives
+  // on completion for this inspection: ReportPdf = the PDF, ReportOnline = the
+  // interactive online report. Seeded from the org defaults in Add/Edit; both
+  // default 1 so pre-migration rows behave exactly as before.
+  try {
+    _db.execSync(
+      `ALTER TABLE Inspections ADD COLUMN ReportPdf INTEGER NOT NULL DEFAULT 1`,
+    );
+  } catch (_) {}
+  try {
+    _db.execSync(
+      `ALTER TABLE Inspections ADD COLUMN ReportOnline INTEGER NOT NULL DEFAULT 1`,
     );
   } catch (_) {}
   // Calendar two-way sync (synced, device-editable like ReportRecipients).

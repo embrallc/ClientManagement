@@ -428,6 +428,12 @@ export async function renderInspectionReport({
   userId,
   orgSk,
   tzOffsetMin = 0,
+  // Report Types: which artifacts to produce. makePdf runs the full PDF pipeline
+  // (report layout + photo embed + draw); makeOnline builds the semantic
+  // ReportModel that powers the interactive/online report. Both default true so
+  // existing callers (the manual in-app generate path) are unchanged.
+  makePdf = true,
+  makeOnline = true,
 }) {
   // 1. Inspection.
   const { data: inspection, error: inspErr } = await admin
@@ -482,6 +488,47 @@ export async function renderInspectionReport({
       const inst = answers?.sections?.[sec.id]?.instances?.[0];
       if (inst) staticInstances.set(sec.id, { fields: inst.fields ?? {} });
     }
+  }
+
+  // Inspector display name — needed by BOTH the model (below) and the PDF ctx
+  // (step 7). Hoisted so an online-only request can build the model and return
+  // before the PDF pipeline.
+  const inspectorName = [profile?.fname, profile?.lname].filter(Boolean).join(" ");
+
+  // Semantic ReportModel for the HTML/online report — built from the walkthrough
+  // data only (decoupled from the PDF band layout). Best-effort: a model failure
+  // must NEVER fail generation, so we log and leave model null. Built up here so
+  // an ONLINE-ONLY request needs no report layout / photo embed / draw at all.
+  let model = null;
+  if (makeOnline) {
+    try {
+      model = buildReportModel({
+        inspection,
+        inspectorName,
+        orgName,
+        wtSchema,
+        answers,
+        tzOffsetMin,
+      });
+    } catch (e) {
+      logError("build_model_failed", e, { inspectionSk });
+    }
+  }
+
+  // No PDF wanted → skip the entire PDF pipeline (which would otherwise REQUIRE a
+  // report layout and throw for an online-only org). Callers avoid invoking with
+  // both types off, but handle it defensively here too.
+  if (!makePdf) {
+    return {
+      bytes: null,
+      pageCount: 0,
+      skippedPhotos: 0,
+      usedDraft: false,
+      autoBuilt: false,
+      model,
+      madePdf: false,
+      madeOnline: !!model,
+    };
   }
 
   // 4. Report layout — published is the contract; draft a courtesy; else
@@ -569,7 +616,7 @@ export async function renderInspectionReport({
   }
 
   // 7. Layout every band instance, then place with keep-together pagination.
-  const inspectorName = [profile?.fname, profile?.lname].filter(Boolean).join(" ");
+  // (inspectorName was hoisted above so the model could be built first.)
   const ctx = {
     inspection,
     inspectorName,
@@ -890,23 +937,16 @@ export async function renderInspectionReport({
     }
   }
 
-  // Semantic ReportModel for the HTML report — built from the walkthrough data
-  // only (decoupled from the PDF band layout). Best-effort: a model failure must
-  // NEVER fail the PDF, so we log and return model:null.
-  let model = null;
-  try {
-    model = buildReportModel({
-      inspection,
-      inspectorName,
-      orgName,
-      wtSchema,
-      answers,
-      tzOffsetMin,
-    });
-  } catch (e) {
-    logError("build_model_failed", e, { inspectionSk });
-  }
-
+  // (The ReportModel was built up-front, before the PDF pipeline.)
   const bytes = await pdf.save();
-  return { bytes, pageCount, skippedPhotos, usedDraft, autoBuilt, model };
+  return {
+    bytes,
+    pageCount,
+    skippedPhotos,
+    usedDraft,
+    autoBuilt,
+    model,
+    madePdf: true,
+    madeOnline: makeOnline && !!model,
+  };
 }

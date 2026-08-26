@@ -25,7 +25,13 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { channelRecipients, sendEmail } from "../_shared/email.ts";
+import {
+  buildCompleteNoticeEmail,
+  buildReportEmail,
+  channelRecipients,
+  sendEmail,
+} from "../_shared/email.ts";
+import { computeReportTypes } from "../_shared/reportTypes.ts";
 import { logCloudEvent, logToCloud } from "../_shared/logToCloud.ts";
 
 declare const Deno: { env: { get(name: string): string | undefined } };
@@ -110,7 +116,7 @@ serve(async (req) => {
   const { data: insp, error: inspErr } = await admin
     .from("inspections")
     .select(
-      "inspection_sk, user_id, org_sk, full_name, address_line1, city, state, email, report_recipients, report_state, paid, status, policy_require_payment_first",
+      "inspection_sk, user_id, org_sk, full_name, address_line1, city, state, email, report_recipients, report_state, paid, status, policy_require_payment_first, report_pdf, report_online",
     )
     .eq("inspection_sk", inspectionSk)
     .maybeSingle();
@@ -172,28 +178,78 @@ serve(async (req) => {
     .order("generated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  const storagePath = latest?.storage_path ?? null;
-  if (!storagePath) return json({ ok: false, error: "no_report" }, 200);
-
-  // 5. Long-TTL signed link.
-  const { data: signed, error: signErr } = await admin.storage
-    .from(REPORT_BUCKET)
-    .createSignedUrl(storagePath, LINK_TTL_SECONDS);
-  if (signErr || !signed?.signedUrl) {
-    console.error(`${TAG} sign_failed`, signErr?.message);
-    return json({ ok: false, error: "sign_failed" }, 200);
-  }
-  const link = signed.signedUrl;
-
   const who = insp.full_name || "there";
   const addr = [insp.address_line1, insp.city, insp.state].filter(Boolean).join(", ");
 
-  // Hosted client viewer (Phase 2): when the latest report has a rendered model,
-  // create/refresh a share (one per inspection) so the client can open the
-  // interactive report online behind email-2FA. Best-effort — a failure here
-  // never blocks the PDF email, and reports predating the model just skip it.
+  // 4.5. Report Types — which artifacts this client gets. Per-inspection flags
+  // come off the inspection row; the org master/default flags off the org row.
+  let orgFlags: Record<string, unknown> | null = null;
+  if (insp.org_sk) {
+    const { data: org } = await admin
+      .from("organizations")
+      .select(
+        "report_pdf_enabled, report_online_enabled, report_pdf_default, report_online_default",
+      )
+      .eq("org_sk", insp.org_sk)
+      .maybeSingle();
+    orgFlags = org ?? null;
+  }
+  const { makePdf, makeOnline } = computeReportTypes(
+    { report_pdf: insp.report_pdf, report_online: insp.report_online },
+    orgFlags,
+  );
+
+  // Neither type enabled → send the short "your inspection is complete" note and
+  // still claim the send (owner delivered something; suppresses auto-send).
+  if (!makePdf && !makeOnline) {
+    const body = buildCompleteNoticeEmail({ fullName: who, addr });
+    const sent = await sendEmail({ to: recipients, ...body });
+    if (!sent.ok) {
+      await logToCloud(admin, {
+        level: "error",
+        event: "report.resend.failed",
+        message: sent.error,
+        context: `resend-report inspection=${inspectionSk}`,
+        userId,
+        orgSk: insp.org_sk ?? null,
+        source: SOURCE,
+      });
+      return json({ ok: false, error: "email_failed", detail: sent.error }, 200);
+    }
+    await logCloudEvent(admin, SOURCE, "report.resent", {
+      userId,
+      orgSk: insp.org_sk ?? null,
+      data: {
+        inspectionSk,
+        recipientCount: recipients.length,
+        id: sent.id,
+        kind: "complete_notice",
+      },
+    });
+    if (insp.report_state !== "sent") {
+      await bumpedUpdate(admin, inspectionSk, { report_state: "sent" });
+    }
+    return json({ ok: true, recipientCount: recipients.length });
+  }
+
+  // 5. Build the links for the enabled types from the LATEST generated report
+  // (resend reuses the latest render — Generate makes a fresh one). A PDF link
+  // only if the org/inspection want a PDF and one exists; the interactive online
+  // link only if they want online and a model exists (create/refresh the share).
+  let pdfUrl: string | null = null;
+  if (makePdf && latest?.storage_path) {
+    const { data: signed, error: signErr } = await admin.storage
+      .from(REPORT_BUCKET)
+      .createSignedUrl(latest.storage_path, LINK_TTL_SECONDS);
+    if (signErr || !signed?.signedUrl) {
+      console.error(`${TAG} sign_failed`, signErr?.message);
+    } else {
+      pdfUrl = signed.signedUrl;
+    }
+  }
+
   let onlineUrl: string | null = null;
-  if (latest?.model_path) {
+  if (makeOnline && latest?.model_path) {
     try {
       const { data: shareRow } = await admin
         .from("report_shares")
@@ -227,30 +283,11 @@ serve(async (req) => {
     }
   }
 
-  const subject = `Your inspection report${addr ? ` — ${addr}` : ""}`;
-  const text =
-    `Hi ${who},\n\n` +
-    `Your inspection report is ready. You can view and download the PDF here:\n${link}\n\n` +
-    (onlineUrl
-      ? `Prefer an interactive version? View your report online — you'll confirm your ` +
-        `email with a quick code for privacy:\n${onlineUrl}\n\n`
-      : "") +
-    `The download link will stop working after 30 days. Thank you!`;
-  const html =
-    `<div style="font-family:-apple-system,system-ui,Segoe UI,sans-serif;color:#1c1c1e;line-height:1.5">` +
-    `<p>Hi ${who},</p>` +
-    `<p>Your inspection report${addr ? ` for <strong>${addr}</strong>` : ""} is ready.</p>` +
-    `<p><a href="${link}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:8px">View report (PDF)</a></p>` +
-    (onlineUrl
-      ? `<p><a href="${onlineUrl}" style="display:inline-block;background:#5b5bd6;color:#fff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:8px">View report online</a></p>` +
-        `<p style="color:#888;font-size:13px">The online report is interactive and mobile-friendly. ` +
-        `For your privacy, you'll confirm your email with a quick code.</p>`
-      : "") +
-    `<p style="color:#888;font-size:13px">Or paste the PDF link into your browser:<br>${link}</p>` +
-    `<p style="color:#888;font-size:13px">The download link expires in 30 days.</p>` +
-    `</div>`;
+  // No artifact yet for any enabled type → tell the app to generate first.
+  if (!pdfUrl && !onlineUrl) return json({ ok: false, error: "no_report" }, 200);
 
-  const sent = await sendEmail({ to: recipients, subject, html, text });
+  const body = buildReportEmail({ fullName: who, addr, pdfUrl, onlineUrl });
+  const sent = await sendEmail({ to: recipients, ...body });
   if (!sent.ok) {
     await logToCloud(admin, {
       level: "error",

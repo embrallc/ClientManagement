@@ -65,6 +65,8 @@ function cloudInspectionToStoreObj(r) {
     ReportState: r.report_state ?? "pending",
     Paid: r.paid ? 1 : 0,
     ReportRecipients: JSON.stringify(r.report_recipients ?? []),
+    ReportPdf: r.report_pdf === false ? 0 : 1,
+    ReportOnline: r.report_online === false ? 0 : 1,
     CalendarEventId: r.calendar_event_id ?? null,
     CalendarOwnerDeviceId: r.calendar_owner_device_id ?? null,
     CalendarSnapshot: r.calendar_snapshot
@@ -199,6 +201,8 @@ async function pushInspections(userId) {
           // payment_state/report_state/paid, so a device upsert can't revert a
           // SENT back to PENDING and cause a duplicate day-before text.
           report_recipients: JSON.parse(r.ReportRecipients || "[]"),
+          report_pdf: !!r.ReportPdf,
+          report_online: !!r.ReportOnline,
           calendar_event_id: r.CalendarEventId ?? null,
           calendar_owner_device_id: r.CalendarOwnerDeviceId ?? null,
           calendar_snapshot: snapshotForCloud(r.CalendarSnapshot),
@@ -267,6 +271,8 @@ export async function pushInspection(sk) {
         has_appt_reminder: !!r.HasApptReminder,
         appt_reminder_status: r.ApptReminderStatus ?? "PENDING",
         report_recipients: JSON.parse(r.ReportRecipients || "[]"),
+        report_pdf: !!r.ReportPdf,
+        report_online: !!r.ReportOnline,
         calendar_event_id: r.CalendarEventId ?? null,
         calendar_owner_device_id: r.CalendarOwnerDeviceId ?? null,
         calendar_snapshot: snapshotForCloud(r.CalendarSnapshot),
@@ -406,9 +412,10 @@ async function pullInspections(userId) {
             ZipCode, ScheduledAt, Phone, Email, Longitude, Latitude, Status,
             HasApptReminder, ApptReminderStatus,
             PaymentState, ReportState, Paid, ReportRecipients,
+            ReportPdf, ReportOnline,
             CalendarEventId, CalendarOwnerDeviceId, CalendarSnapshot,
             _version, _lastChangedAt, _deleted, Synced)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             r.inspection_sk,
             r.user_id,
@@ -431,6 +438,8 @@ async function pullInspections(userId) {
             r.report_state ?? "pending",
             r.paid ? 1 : 0,
             JSON.stringify(r.report_recipients ?? []),
+            r.report_pdf === false ? 0 : 1,
+            r.report_online === false ? 0 : 1,
             r.calendar_event_id ?? null,
             r.calendar_owner_device_id ?? null,
             snapshotForLocal(r.calendar_snapshot),
@@ -490,6 +499,7 @@ async function pullInspections(userId) {
            ZipCode=?, ScheduledAt=?, Phone=?, Email=?, Longitude=?, Latitude=?, Status=?,
            HasApptReminder=?, ApptReminderStatus=?,
            PaymentState=?, ReportState=?, Paid=?, ReportRecipients=?,
+           ReportPdf=?, ReportOnline=?,
            CalendarEventId=?, CalendarOwnerDeviceId=?, CalendarSnapshot=?,
            _version=?, _lastChangedAt=?, _deleted=?, Synced=1
            WHERE InspectionSk=?`,
@@ -514,6 +524,8 @@ async function pullInspections(userId) {
             r.report_state ?? "pending",
             r.paid ? 1 : 0,
             JSON.stringify(r.report_recipients ?? []),
+            r.report_pdf === false ? 0 : 1,
+            r.report_online === false ? 0 : 1,
             r.calendar_event_id ?? null,
             r.calendar_owner_device_id ?? null,
             snapshotForLocal(r.calendar_snapshot),

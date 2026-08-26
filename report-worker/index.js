@@ -119,6 +119,11 @@ app.post("/api/render-internal", async (req, res) => {
   const tzOffsetMin = Number.isFinite(req.body?.tzOffsetMinutes)
     ? Number(req.body.tzOffsetMinutes)
     : 0;
+  // Report Types — which artifacts to produce. The caller (send-report-to-client)
+  // computes these from the org + inspection flags. Default true when omitted so
+  // the original "always produce both" behavior is preserved for any other caller.
+  const makePdf = req.body?.makePdf !== false;
+  const makeOnline = req.body?.makeOnline !== false;
   if (!inspectionSk) {
     return res.status(400).json({ error: "missing_fields", required: ["inspectionSk"] });
   }
@@ -143,28 +148,47 @@ app.post("/api/render-internal", async (req, res) => {
       orgId = u?.org_sk ?? null;
     }
 
-    const { bytes, pageCount, model } = await renderInspectionReport({
-      inspectionSk,
-      userId,
-      orgSk: orgId,
-      tzOffsetMin,
-    });
-    const storagePath = buildStoragePath({ orgId, userId, inspectionId: inspectionSk });
-    await uploadReport(storagePath, bytes);
-    const modelPath = await storeModel(storagePath, model);
-    await recordReport({
-      inspectionId: inspectionSk,
-      orgId,
-      userId,
-      storagePath,
-      modelPath,
-      sizeBytes: bytes.length,
-      pageCount,
-    });
+    const { bytes, pageCount, model, madePdf, madeOnline } =
+      await renderInspectionReport({
+        inspectionSk,
+        userId,
+        orgSk: orgId,
+        tzOffsetMin,
+        makePdf,
+        makeOnline,
+      });
+
+    // Base path for this generation — used as the PDF path (when a PDF was made)
+    // and as the stem for the sibling `.model.json`. Computing it is pure string
+    // work, so it's safe even for an online-only render that uploads no PDF.
+    const basePath = buildStoragePath({ orgId, userId, inspectionId: inspectionSk });
+    let storagePath = null;
+    if (madePdf && bytes) {
+      await uploadReport(basePath, bytes);
+      storagePath = basePath;
+    }
+    const modelPath = madeOnline ? await storeModel(basePath, model) : null;
+
+    // Record the audit row when SOMETHING was produced. storage_path is nullable
+    // now, so an online-only report is still recorded (via its model_path).
+    if (storagePath || modelPath) {
+      await recordReport({
+        inspectionId: inspectionSk,
+        orgId,
+        userId,
+        storagePath,
+        modelPath,
+        sizeBytes: bytes ? bytes.length : 0,
+        pageCount,
+      });
+    }
     return res.status(200).json({
       storagePath,
+      modelPath,
+      madePdf: !!storagePath,
+      madeOnline: !!modelPath,
       pageCount,
-      sizeBytes: bytes.length,
+      sizeBytes: bytes ? bytes.length : 0,
       generatedAt: new Date().toISOString(),
     });
   } catch (e) {

@@ -202,8 +202,8 @@ serve(async (req) => {
   // Neither type enabled → send the short "your inspection is complete" note and
   // still claim the send (owner delivered something; suppresses auto-send).
   if (!makePdf && !makeOnline) {
-    const body = buildCompleteNoticeEmail({ fullName: who, addr });
-    const sent = await sendEmail({ to: recipients, ...body });
+    const emailBody = buildCompleteNoticeEmail({ fullName: who, addr });
+    const sent = await sendEmail({ to: recipients, ...emailBody });
     if (!sent.ok) {
       await logToCloud(admin, {
         level: "error",
@@ -286,8 +286,8 @@ serve(async (req) => {
   // No artifact yet for any enabled type → tell the app to generate first.
   if (!pdfUrl && !onlineUrl) return json({ ok: false, error: "no_report" }, 200);
 
-  const body = buildReportEmail({ fullName: who, addr, pdfUrl, onlineUrl });
-  const sent = await sendEmail({ to: recipients, ...body });
+  const emailBody = buildReportEmail({ fullName: who, addr, pdfUrl, onlineUrl });
+  const sent = await sendEmail({ to: recipients, ...emailBody });
   if (!sent.ok) {
     await logToCloud(admin, {
       level: "error",

@@ -167,8 +167,8 @@ serve(async (req) => {
   // Neither type enabled → email a short "your inspection is complete" note
   // instead of a report. A successful outcome (report_state -> 'sent'), not a skip.
   if (!makePdf && !makeOnline) {
-    const body = buildCompleteNoticeEmail({ fullName: who, addr });
-    const sent = await sendEmail({ to: recipients, ...body });
+    const emailBody = buildCompleteNoticeEmail({ fullName: who, addr });
+    const sent = await sendEmail({ to: recipients, ...emailBody });
     if (!sent.ok) {
       logError("complete_notice_failed", new Error(sent.error), { inspectionSk });
       return json({ ok: false, error: "email_failed", detail: sent.error }, 200);
@@ -292,8 +292,8 @@ serve(async (req) => {
     return json({ ok: false, error: "generate_failed" }, 200);
   }
 
-  const body = buildReportEmail({ fullName: who, addr, pdfUrl, onlineUrl });
-  const sent = await sendEmail({ to: recipients, ...body });
+  const emailBody = buildReportEmail({ fullName: who, addr, pdfUrl, onlineUrl });
+  const sent = await sendEmail({ to: recipients, ...emailBody });
   if (!sent.ok) {
     logError("email_failed", new Error(sent.error), { inspectionSk });
     return json({ ok: false, error: "email_failed", detail: sent.error }, 200);

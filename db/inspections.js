@@ -112,8 +112,9 @@ export async function insertInspection(data) {
         AddressLine1, AddressLine2, City, State, ZipCode,
         ScheduledAt, Phone, Email, Longitude, Latitude,
         HasApptReminder, ApptReminderStatus, ReportRecipients,
+        ReportPdf, ReportOnline,
         _version, _lastChangedAt, _deleted
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 0)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 0)`,
       [
         sk,
         data.UserSk,
@@ -132,6 +133,8 @@ export async function insertInspection(data) {
         data.HasApptReminder ?? 0,
         data.ApptReminderStatus ?? "PENDING",
         data.ReportRecipients ?? "[]",
+        data.ReportPdf ?? 1,
+        data.ReportOnline ?? 1,
         now,
       ],
     );
@@ -161,6 +164,8 @@ export async function updateInspection(sk, data) {
         ScheduledAt = ?, Phone = ?, Email = ?,
         Longitude = ?, Latitude = ?, HasApptReminder = ?,
         ReportRecipients = COALESCE(?, ReportRecipients),
+        ReportPdf = COALESCE(?, ReportPdf),
+        ReportOnline = COALESCE(?, ReportOnline),
         _version = _version + 1, _lastChangedAt = ?, Synced = 0
       WHERE InspectionSk = ?`,
       [
@@ -178,6 +183,8 @@ export async function updateInspection(sk, data) {
         data.Latitude ?? null,
         data.HasApptReminder ?? 0,
         data.ReportRecipients ?? null,
+        data.ReportPdf ?? null,
+        data.ReportOnline ?? null,
         now,
         sk,
       ],

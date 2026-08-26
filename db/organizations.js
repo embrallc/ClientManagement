@@ -130,3 +130,46 @@ export async function setOrgPaymentPolicy(orgSk, patch) {
   if (error) throw error;
   return true;
 }
+
+// Report Types config for this org. `*_enabled` = which report types the org
+// produces at all; `*_default` = the default state of a NEW inspection's toggle.
+// Read fails soft (returns null) — the caller falls back to "both on" so a
+// transient offline read never hides an option. Any org member may read it (org
+// SELECT RLS is role-agnostic); only the owner may write (below).
+export async function getOrgReportTypes(orgSk) {
+  if (!orgSk) return null;
+  try {
+    const { data, error } = await supabase
+      .from("organizations")
+      .select(
+        "report_pdf_enabled, report_online_enabled, report_pdf_default, report_online_default",
+      )
+      .eq("org_sk", orgSk)
+      .maybeSingle();
+    if (error) throw error;
+    return data ?? null;
+  } catch (e) {
+    logError(e, `db/organizations.getOrgReportTypes orgSk=${orgSk}`);
+    return null;
+  }
+}
+
+// Owner-only (RLS auth_uid_owns_org). Updates one or more Report Types columns.
+// Throws on failure (incl. RLS reject) so the caller can revert its optimistic UI.
+export async function setOrgReportTypes(orgSk, patch) {
+  const allowed = [
+    "report_pdf_enabled",
+    "report_online_enabled",
+    "report_pdf_default",
+    "report_online_default",
+  ];
+  const update = {};
+  for (const k of allowed) if (k in patch) update[k] = patch[k];
+  if (Object.keys(update).length === 0) return true;
+  const { error } = await supabase
+    .from("organizations")
+    .update(update)
+    .eq("org_sk", orgSk);
+  if (error) throw error;
+  return true;
+}

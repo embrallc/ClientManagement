@@ -118,6 +118,82 @@ export function buildOtpEmail(opts: {
   return { subject, html, text };
 }
 
+// The report-ready email delivered to the client. Adapts to which artifacts the
+// inspection produced (Report Types): a PDF link, the interactive online link, or
+// both. At least one URL must be present (the caller sends buildCompleteNotice-
+// Email instead when neither type is enabled). Shared by the auto-send path
+// (send-report-to-client) and the manual send (resend-report) so the two emails
+// stay byte-identical.
+export function buildReportEmail(opts: {
+  fullName?: string | null;
+  addr?: string | null;
+  pdfUrl?: string | null;
+  onlineUrl?: string | null;
+  ttlDays?: number;
+}): { subject: string; html: string; text: string } {
+  const who = opts.fullName || "there";
+  const addr = (opts.addr || "").trim();
+  const ttl = opts.ttlDays ?? 30;
+  const pdfUrl = opts.pdfUrl || null;
+  const onlineUrl = opts.onlineUrl || null;
+
+  const subject = `Your inspection report${addr ? ` — ${addr}` : ""}`;
+
+  const text =
+    `Hi ${who},\n\n` +
+    `Your inspection report${addr ? ` for ${addr}` : ""} is ready.\n\n` +
+    (pdfUrl ? `View and download the PDF here:\n${pdfUrl}\n\n` : "") +
+    (onlineUrl
+      ? `${pdfUrl ? "Prefer an interactive version? " : ""}View your report online` +
+        ` — you'll confirm your email with a quick code for privacy:\n${onlineUrl}\n\n`
+      : "") +
+    (pdfUrl ? `The download link will stop working after ${ttl} days. ` : "") +
+    `Thank you!`;
+
+  const html =
+    `<div style="font-family:-apple-system,system-ui,Segoe UI,sans-serif;color:#1c1c1e;line-height:1.5">` +
+    `<p>Hi ${who},</p>` +
+    `<p>Your inspection report${addr ? ` for <strong>${addr}</strong>` : ""} is ready.</p>` +
+    (pdfUrl
+      ? `<p><a href="${pdfUrl}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:8px">View report (PDF)</a></p>`
+      : "") +
+    (onlineUrl
+      ? `<p><a href="${onlineUrl}" style="display:inline-block;background:#5b5bd6;color:#fff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:8px">View report online</a></p>` +
+        `<p style="color:#888;font-size:13px">The online report is interactive and mobile-friendly. ` +
+        `For your privacy, you'll confirm your email with a quick code.</p>`
+      : "") +
+    (pdfUrl
+      ? `<p style="color:#888;font-size:13px">Or paste the PDF link into your browser:<br>${pdfUrl}</p>` +
+        `<p style="color:#888;font-size:13px">The download link expires in ${ttl} days.</p>`
+      : "") +
+    `</div>`;
+
+  return { subject, html, text };
+}
+
+// Sent when an inspection is completed but the client gets NO report (both report
+// types are turned off for it) — a short courtesy note so the client still hears
+// that the visit wrapped up.
+export function buildCompleteNoticeEmail(opts: {
+  fullName?: string | null;
+  addr?: string | null;
+}): { subject: string; html: string; text: string } {
+  const who = opts.fullName || "there";
+  const addr = (opts.addr || "").trim();
+  const subject = `Your inspection is complete${addr ? ` — ${addr}` : ""}`;
+  const text =
+    `Hi ${who},\n\n` +
+    `Your inspection${addr ? ` at ${addr}` : ""} is complete. ` +
+    `If you have any questions, just reply to this email. Thank you!`;
+  const html =
+    `<div style="font-family:-apple-system,system-ui,Segoe UI,sans-serif;color:#1c1c1e;line-height:1.5">` +
+    `<p>Hi ${who},</p>` +
+    `<p>Your inspection${addr ? ` at <strong>${addr}</strong>` : ""} is complete.</p>` +
+    `<p>If you have any questions, just reply to this email. Thank you!</p>` +
+    `</div>`;
+  return { subject, html, text };
+}
+
 export async function sendEmail({
   to,
   subject,

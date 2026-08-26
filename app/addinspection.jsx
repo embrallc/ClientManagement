@@ -25,14 +25,15 @@ import AddressAutocomplete from "../components/AddressAutocomplete";
 import KeyboardToolbar from "../components/KeyboardToolbar";
 import { insertInspection, updateInspection } from "../db/inspections";
 import { logError } from "../db/logs";
-import { pushInspection } from "../utils/sync";
 import { NOTIFICATION_NAMES } from "../db/notificationSettings";
+import { getOrgReportTypes } from "../db/organizations";
 import { showBanner } from "../stores/useBannerStore";
 import { useInspectionStore } from "../stores/useInspectionStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { isOnline } from "../utils/connectivity";
 import { maybePromptForUpcomingApptNotif } from "../utils/notifications";
 import { findOverlappingInspection } from "../utils/overlapUtils";
+import { pushInspection } from "../utils/sync";
 
 const FIELD_ORDER = [
   "FullName",
@@ -67,6 +68,7 @@ export default function AddInspectionScreen() {
   const updateInStore = useInspectionStore((s) => s.update);
   const allInspections = useInspectionStore((s) => s.inspections);
   const userSk = useSettingsStore((s) => s.userSk);
+  const orgSk = useSettingsStore((s) => s.orgSk);
   const apptLengthMinutes = useSettingsStore((s) => s.apptLengthMinutes);
   const apptReminderDefault = useSettingsStore((s) => s.apptReminderSmsEnabled);
 
@@ -87,6 +89,48 @@ export default function AddInspectionScreen() {
   const [hasApptReminder, setHasApptReminder] = useState(() =>
     existing ? !!existing.HasApptReminder : !!apptReminderDefault,
   );
+
+  // Report Types — which artifacts the CLIENT receives for THIS inspection.
+  // Editing shows the stored values; a new inspection seeds from the org defaults
+  // once they load (see effect below). orgReportCfg gates which toggles are even
+  // shown: a type the org has turned off can't be produced, so we hide it.
+  // Null cfg (loading / offline) falls back to "both available" — never hide an
+  // option on a transient read.
+  const [orgReportCfg, setOrgReportCfg] = useState(null);
+  const [reportPdf, setReportPdf] = useState(() =>
+    existing ? !!existing.ReportPdf : true,
+  );
+  const [reportOnline, setReportOnline] = useState(() =>
+    existing ? !!existing.ReportOnline : true,
+  );
+  const reportSeededRef = useRef(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const cfg = await getOrgReportTypes(orgSk);
+      if (!alive) return;
+      setOrgReportCfg(cfg);
+      // Seed a NEW inspection's toggles from the org defaults, once. A type the
+      // org has disabled seeds OFF (and stays hidden). Editing keeps the stored
+      // values.
+      if (!isEditing && !reportSeededRef.current && cfg) {
+        reportSeededRef.current = true;
+        setReportPdf(cfg.report_pdf_enabled ? !!cfg.report_pdf_default : false);
+        setReportOnline(
+          cfg.report_online_enabled ? !!cfg.report_online_default : false,
+        );
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [orgSk, isEditing]);
+
+  const pdfAvailable = orgReportCfg ? !!orgReportCfg.report_pdf_enabled : true;
+  const onlineAvailable = orgReportCfg
+    ? !!orgReportCfg.report_online_enabled
+    : true;
 
   const [form, setForm] = useState({
     FullName: existing?.FullName ?? "",
@@ -350,6 +394,10 @@ export default function AddInspectionScreen() {
       Latitude: lat,
       Longitude: lng,
       HasApptReminder: hasApptReminder ? 1 : 0,
+      // Only persist a type as ON when the org actually offers it (a disabled
+      // type can't be produced). Mirrors the worker's org-enable gate.
+      ReportPdf: pdfAvailable && reportPdf ? 1 : 0,
+      ReportOnline: onlineAvailable && reportOnline ? 1 : 0,
     };
 
     try {
@@ -366,7 +414,10 @@ export default function AddInspectionScreen() {
         const created = await insertInspection({ ...data, UserSk: userSk });
         addToStore(created);
         pushInspection(created.InspectionSk).catch((e) =>
-          logError(e, `AddInspectionScreen.handleSave.push sk=${created.InspectionSk}`),
+          logError(
+            e,
+            `AddInspectionScreen.handleSave.push sk=${created.InspectionSk}`,
+          ),
         );
         // First-inspection onboarding prompt for local reminders. No-op
         // after the first time it runs (AsyncStorage flag inside the helper).
@@ -462,7 +513,8 @@ export default function AddInspectionScreen() {
       return;
     }
     setRecipients((prev) => {
-      if (prev.some((x) => x.email.toLowerCase() === v.toLowerCase())) return prev;
+      if (prev.some((x) => x.email.toLowerCase() === v.toLowerCase()))
+        return prev;
       return [...prev, { email: v, report: true, invoice: prev.length === 0 }];
     });
     setEmailDraft("");
@@ -586,7 +638,11 @@ export default function AddInspectionScreen() {
                       from={{ opacity: 0, translateY: -6 }}
                       animate={{ opacity: 1, translateY: 0 }}
                       exit={{ opacity: 0, scale: 0.9 }}
-                      transition={{ type: "spring", damping: 18, stiffness: 220 }}
+                      transition={{
+                        type: "spring",
+                        damping: 18,
+                        stiffness: 220,
+                      }}
                     >
                       <View style={styles.recipientRow}>
                         <TouchableOpacity
@@ -803,6 +859,60 @@ export default function AddInspectionScreen() {
               thumbColor="#fff"
             />
           </View>
+
+          {pdfAvailable || onlineAvailable ? (
+            <>
+              <Text style={styles.sectionLabel}>REPORT</Text>
+              <Text style={styles.reportIntro}>
+                Choose what this client gets when you complete the inspection.
+              </Text>
+              {pdfAvailable ? (
+                <View style={styles.reminderRow}>
+                  <View style={styles.reminderText}>
+                    <Text style={styles.reminderLabel}>PDF report</Text>
+                    <Text style={styles.reminderDescription}>
+                      A downloadable PDF, emailed to the client.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={reportPdf}
+                    onValueChange={setReportPdf}
+                    trackColor={{
+                      false: theme.colors.input,
+                      true: theme.colors.primary,
+                    }}
+                    thumbColor="#fff"
+                  />
+                </View>
+              ) : null}
+              {onlineAvailable ? (
+                <View
+                  style={[
+                    styles.reminderRow,
+                    pdfAvailable && { marginTop: theme.spacing.s },
+                  ]}
+                >
+                  <View style={styles.reminderText}>
+                    <Text style={styles.reminderLabel}>
+                      Interactive online report
+                    </Text>
+                    <Text style={styles.reminderDescription}>
+                      A mobile-friendly web report the client opens by link.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={reportOnline}
+                    onValueChange={setReportOnline}
+                    trackColor={{
+                      false: theme.colors.input,
+                      true: theme.colors.primary,
+                    }}
+                    thumbColor="#fff"
+                  />
+                </View>
+              ) : null}
+            </>
+          ) : null}
 
           <Text style={styles.sectionLabel}>LOCATION</Text>
 
@@ -1078,6 +1188,12 @@ const styles = StyleSheet.create({
     ...theme.typography.caption,
     color: theme.colors.textSubtle,
     marginTop: 2,
+  },
+  reportIntro: {
+    ...theme.typography.caption,
+    color: theme.colors.textSubtle,
+    marginBottom: theme.spacing.s,
+    lineHeight: 17,
   },
   emailSuggestionRow: {
     paddingTop: theme.spacing.xs,

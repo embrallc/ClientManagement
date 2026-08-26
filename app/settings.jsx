@@ -668,8 +668,13 @@ export default function SettingsScreen() {
           onPress={() => router.push("/calendarsettings")}
         />
 
-        <Text style={styles.sectionLabel}>PAYMENTS & AUTOMATION</Text>
+        <Text style={styles.sectionLabel}>REPORTS & PAYMENTS</Text>
         <Guard guard={userProfile === "owner"}>
+          <NavRow
+            label="Report Types"
+            description="Choose whether inspections produce a PDF, an interactive online report, or both"
+            onPress={() => router.push("/reporttypes")}
+          />
           <NavRow
             label="Automatic Document Send"
             description="Auto-send the report when you complete an inspection — plus invoicing and payment-gated reports once payments are set up"

@@ -15,7 +15,13 @@ import {
   createClient,
   SupabaseClient,
 } from "npm:@supabase/supabase-js@2";
-import { channelRecipients, sendEmail } from "../_shared/email.ts";
+import {
+  buildCompleteNoticeEmail,
+  buildReportEmail,
+  channelRecipients,
+  sendEmail,
+} from "../_shared/email.ts";
+import { computeReportTypes } from "../_shared/reportTypes.ts";
 
 declare const Deno: { env: { get(name: string): string | undefined } };
 
@@ -100,7 +106,7 @@ serve(async (req) => {
   const { data: insp, error: inspErr } = await admin
     .from("inspections")
     .select(
-      "inspection_sk, user_id, full_name, address_line1, city, state, email, report_recipients",
+      "inspection_sk, user_id, org_sk, full_name, address_line1, city, state, email, report_recipients, report_pdf, report_online",
     )
     .eq("inspection_sk", inspectionSk)
     .maybeSingle();
@@ -122,35 +128,67 @@ serve(async (req) => {
     return json({ ok: false, error: "no_recipients" }, 200);
   }
 
-  // Org timezone → offset, so the auto-generated report shows local times.
-  let orgTz: string | null = null;
-  if (insp.user_id) {
+  // Resolve the org (the inspection's own org_sk, or the owner's as a fallback)
+  // and read its timezone + Report Types flags together.
+  let orgSk: string | null = insp.org_sk ?? null;
+  if (!orgSk && insp.user_id) {
     const { data: owner } = await admin
       .from("users")
       .select("org_sk")
       .eq("id", insp.user_id)
       .maybeSingle();
-    if (owner?.org_sk) {
-      const { data: org } = await admin
-        .from("organizations")
-        .select("timezone")
-        .eq("org_sk", owner.org_sk)
-        .maybeSingle();
-      orgTz = org?.timezone ?? null;
-    }
+    orgSk = owner?.org_sk ?? null;
+  }
+  let orgTz: string | null = null;
+  let orgFlags: Record<string, unknown> | null = null;
+  if (orgSk) {
+    const { data: org } = await admin
+      .from("organizations")
+      .select(
+        "timezone, report_pdf_enabled, report_online_enabled, report_pdf_default, report_online_default",
+      )
+      .eq("org_sk", orgSk)
+      .maybeSingle();
+    orgTz = (org?.timezone as string | null) ?? null;
+    orgFlags = org ?? null;
   }
 
-  // Always render a FRESH PDF right before sending. Auto-send is one-time
-  // (reconcile claims report_state around this call and sets 'sent'), so the PDF
-  // we email is the client's authoritative copy — it MUST reflect the CURRENT
-  // cloud answers, never a cached earlier render. We used to reuse the latest
-  // inspection_reports row and only render `if (!storagePath)`; that mailed a
-  // stale report whenever one had already been rendered before the final edits —
-  // e.g. the inspector taps Generate to preview, fixes a typo/adds a photo, then
-  // marks Complete → auto-send reused the pre-fix preview. Rendering here is
-  // cheap (one worker call, ~once per inspection) and render-internal records the
-  // new inspection_reports row itself, so Share/restore still find the newest.
-  // Service-role bearer = trusted server-to-server.
+  // Report Types — which artifacts this client gets on completion.
+  const { makePdf, makeOnline } = computeReportTypes(
+    { report_pdf: insp.report_pdf, report_online: insp.report_online },
+    orgFlags,
+  );
+
+  const who = insp.full_name || "there";
+  const addr = [insp.address_line1, insp.city, insp.state]
+    .filter(Boolean)
+    .join(", ");
+
+  // Neither type enabled → email a short "your inspection is complete" note
+  // instead of a report. A successful outcome (report_state -> 'sent'), not a skip.
+  if (!makePdf && !makeOnline) {
+    const body = buildCompleteNoticeEmail({ fullName: who, addr });
+    const sent = await sendEmail({ to: recipients, ...body });
+    if (!sent.ok) {
+      logError("complete_notice_failed", new Error(sent.error), { inspectionSk });
+      return json({ ok: false, error: "email_failed", detail: sent.error }, 200);
+    }
+    logInfo("complete_notice_sent", {
+      inspectionSk,
+      recipientCount: recipients.length,
+    });
+    return json({
+      ok: true,
+      recipientCount: recipients.length,
+      kind: "complete_notice",
+    });
+  }
+
+  // Always render FRESH right before sending, honoring the report-type flags, so
+  // the client's authoritative copy reflects the CURRENT cloud answers (never a
+  // cached earlier render). render-internal produces ONLY the requested artifacts
+  // and returns their paths + which it actually made. Service-role bearer =
+  // trusted server-to-server.
   const workerUrl = (Deno.env.get("REPORT_WORKER_URL") ?? "").replace(/\/$/, "");
   if (!workerUrl) {
     logError("worker_not_configured", new Error("REPORT_WORKER_URL not set"), {
@@ -159,6 +197,10 @@ serve(async (req) => {
     return json({ ok: false, error: "generate_failed" }, 200);
   }
   let storagePath: string | null = null;
+  let modelPath: string | null = null;
+  let generatedAt: string | null = null;
+  let madePdf = false;
+  let madeOnline = false;
   try {
     const res = await fetch(`${workerUrl}/api/render-internal`, {
       method: "POST",
@@ -169,53 +211,100 @@ serve(async (req) => {
       body: JSON.stringify({
         inspectionSk,
         tzOffsetMinutes: tzOffsetMinutes(orgTz),
+        makePdf,
+        makeOnline,
       }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data?.storagePath) {
+    if (!res.ok) {
       logError("generate_failed", new Error(data?.error ?? `status ${res.status}`), {
         inspectionSk,
       });
       return json({ ok: false, error: "generate_failed" }, 200);
     }
-    storagePath = data.storagePath;
+    storagePath = data?.storagePath ?? null;
+    modelPath = data?.modelPath ?? null;
+    generatedAt = data?.generatedAt ?? null;
+    madePdf = data?.madePdf === true && !!storagePath;
+    madeOnline = data?.madeOnline === true && !!modelPath;
   } catch (e) {
     logError("generate_threw", e, { inspectionSk });
     return json({ ok: false, error: "generate_failed" }, 200);
   }
 
-  // Long-TTL signed link.
-  const { data: signed, error: signErr } = await admin.storage
-    .from(REPORT_BUCKET)
-    .createSignedUrl(storagePath!, LINK_TTL_SECONDS);
-  if (signErr || !signed?.signedUrl) {
-    logError("sign_failed", signErr, { storagePath });
-    return json({ ok: false, error: "sign_failed" }, 200);
+  // PDF link (signed, long TTL) when a PDF was produced.
+  let pdfUrl: string | null = null;
+  if (madePdf && storagePath) {
+    const { data: signed, error: signErr } = await admin.storage
+      .from(REPORT_BUCKET)
+      .createSignedUrl(storagePath, LINK_TTL_SECONDS);
+    if (signErr || !signed?.signedUrl) {
+      logError("sign_failed", signErr, { storagePath });
+    } else {
+      pdfUrl = signed.signedUrl;
+    }
   }
-  const link = signed.signedUrl;
 
-  const who = insp.full_name || "there";
-  const addr = [insp.address_line1, insp.city, insp.state].filter(Boolean).join(", ");
-  const subject = `Your inspection report${addr ? ` — ${addr}` : ""}`;
-  const text =
-    `Hi ${who},\n\n` +
-    `Your inspection report is ready. You can view and download it here:\n${link}\n\n` +
-    `This link will stop working after 30 days. Thank you!`;
-  const html =
-    `<div style="font-family:-apple-system,system-ui,Segoe UI,sans-serif;color:#1c1c1e;line-height:1.5">` +
-    `<p>Hi ${who},</p>` +
-    `<p>Your inspection report${addr ? ` for <strong>${addr}</strong>` : ""} is ready.</p>` +
-    `<p><a href="${link}" style="display:inline-block;background:#2f6fed;color:#fff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:8px">View your report</a></p>` +
-    `<p style="color:#888;font-size:13px">Or paste this link into your browser:<br>${link}</p>` +
-    `<p style="color:#888;font-size:13px">This link expires in 30 days.</p>` +
-    `</div>`;
+  // Online link — create/refresh the client share (email-2FA) when a model was
+  // produced, so the client can open the interactive report at getzanbi.com/report.
+  // Mirrors resend-report's share upsert; best-effort.
+  let onlineUrl: string | null = null;
+  if (madeOnline && modelPath) {
+    try {
+      const { data: shareRow } = await admin
+        .from("report_shares")
+        .upsert(
+          {
+            inspection_sk: inspectionSk,
+            org_sk: orgSk,
+            model_path: modelPath,
+            report_generated_at: generatedAt ?? new Date().toISOString(),
+            property_label: addr || null,
+            authorized_emails: recipients,
+            created_by: insp.user_id ?? null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "inspection_sk" },
+        )
+        .select("share_token")
+        .single();
+      if (shareRow?.share_token) {
+        const staging = (Deno.env.get("SUPABASE_URL") ?? "").includes(
+          "agdnsnrbwqavqrdngpmh",
+        );
+        onlineUrl =
+          `https://getzanbi.com/report?token=${shareRow.share_token}` +
+          (staging ? "&env=staging" : "");
+      }
+    } catch (e) {
+      logError("share_upsert_failed", e, { inspectionSk });
+    }
+  }
 
-  const sent = await sendEmail({ to: recipients, subject, html, text });
+  // Intended to deliver a report but produced no usable link → a real failure.
+  // Let the reconciler mark it 'failed' + retry rather than mask it.
+  if (!pdfUrl && !onlineUrl) {
+    logError("no_deliverable", new Error("render produced no links"), {
+      inspectionSk,
+      makePdf,
+      makeOnline,
+    });
+    return json({ ok: false, error: "generate_failed" }, 200);
+  }
+
+  const body = buildReportEmail({ fullName: who, addr, pdfUrl, onlineUrl });
+  const sent = await sendEmail({ to: recipients, ...body });
   if (!sent.ok) {
     logError("email_failed", new Error(sent.error), { inspectionSk });
     return json({ ok: false, error: "email_failed", detail: sent.error }, 200);
   }
 
-  logInfo("sent", { inspectionSk, recipientCount: recipients.length, id: sent.id });
+  logInfo("sent", {
+    inspectionSk,
+    recipientCount: recipients.length,
+    id: sent.id,
+    pdf: !!pdfUrl,
+    online: !!onlineUrl,
+  });
   return json({ ok: true, recipientCount: recipients.length });
 });

@@ -292,7 +292,7 @@ export default function LoginScreen() {
           /* Card */
           <View style={styles.card}>
             <Text style={styles.cardTitle}>
-              {isSignIn ? "Welcome back" : "Create your account"}
+              {isSignIn ? "Welcome" : "Create your account"}
             </Text>
 
             {error ? (
